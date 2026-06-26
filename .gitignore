@@ -23,3 +23,7 @@ dump.rdb
 .DS_Store
 .idea/
 .vscode/
+
+# 本地 dev.sh 生成物
+backend/.venv/
+.dev-serve/

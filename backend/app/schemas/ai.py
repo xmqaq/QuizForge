@@ -21,3 +21,11 @@ class GenerateResponse(BaseModel):
 class GenerateFromFileResponse(BaseModel):
     task_id: str
     file_task_id: str
+
+
+class SuggestTopicsRequest(BaseModel):
+    bank_title: str = Field(..., min_length=1, max_length=100, description="题库标题")
+
+
+class SuggestTopicsResponse(BaseModel):
+    topics: list[str]

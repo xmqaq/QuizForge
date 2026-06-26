@@ -76,3 +76,34 @@ async def generate_questions(
         except (json.JSONDecodeError, ValueError) as e:
             last_err = e
     raise RuntimeError(f"AI 返回内容解析失败: {last_err}")
+
+
+SUGGEST_PROMPT = """你是一个专业的题库设计专家。
+用户正在为"{bank_title}"创建题库，请推荐 6 个适合出选择题的核心知识点或考点主题。
+
+要求：
+1. 每个主题 6-16 个字，简洁具体，适合直接作为出题范围
+2. 覆盖该领域的不同方向，不要全部集中在同一子领域
+3. 仅输出 JSON，格式如下，不要有任何其他文字：
+{{"topics": ["主题1", "主题2", "主题3", "主题4", "主题5", "主题6"]}}"""
+
+
+async def suggest_topics(bank_title: str) -> list[str]:
+    """根据题库标题，让 AI 推荐适合出题的知识点主题列表。"""
+    prompt = SUGGEST_PROMPT.format(bank_title=bank_title)
+    last_err: Exception | None = None
+    for _ in range(2):
+        resp = await client.chat.completions.create(
+            model=settings.DEEPSEEK_MODEL,
+            messages=[{"role": "user", "content": prompt}],
+            response_format={"type": "json_object"},
+            temperature=0.8,
+        )
+        try:
+            data = json.loads(resp.choices[0].message.content or "")
+            topics = data.get("topics", [])
+            if isinstance(topics, list) and topics:
+                return [str(t) for t in topics]
+        except (json.JSONDecodeError, ValueError) as e:
+            last_err = e
+    raise RuntimeError(f"AI 推荐知识点失败: {last_err}")
