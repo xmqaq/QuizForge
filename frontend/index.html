@@ -158,6 +158,45 @@
     .main { padding: 22px 18px 50px; }
   }
   @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+
+  /* ---------- 答题双栏布局 ---------- */
+  .quiz-layout { display: grid; grid-template-columns: 1fr 200px; gap: 20px; align-items: start; max-width: 900px; }
+  .quiz-panel { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 20px; position: sticky; top: 24px; }
+  .quiz-panel h4 { font-size: 12px; font-weight: 600; color: var(--muted); letter-spacing: .3px; margin: 0 0 12px; }
+  .omr-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+  .omr-cell {
+    aspect-ratio: 1; border-radius: 6px; border: 1.5px solid var(--line);
+    display: grid; place-items: center; font-family: var(--mono); font-size: 11px;
+    font-weight: 700; color: var(--muted); cursor: pointer; transition: all .12s;
+  }
+  .omr-cell:hover { border-color: var(--accent); color: var(--accent); }
+  .omr-cell.cur { border-color: var(--accent); background: var(--accent); color: #fff; }
+  .omr-cell.hit { border-color: var(--correct); background: var(--correct-soft); color: var(--correct); }
+  .omr-cell.mis { border-color: var(--wrong); background: var(--wrong-soft); color: var(--wrong); }
+  .omr-cell.skp { border-color: var(--muted); background: var(--paper); color: var(--muted); opacity: .5; }
+  .omr-legend { display: flex; flex-direction: column; gap: 5px; margin-top: 12px; font-size: 11px; color: var(--muted); }
+  .omr-legend span { display: flex; align-items: center; gap: 5px; }
+  .omr-dot { width: 10px; height: 10px; border-radius: 3px; flex: none; }
+  .qtimer { font-family: var(--mono); font-size: 12px; color: var(--muted); padding: 3px 8px;
+    border-radius: 999px; background: var(--paper); border: 1px solid var(--line); }
+  .qtimer.slow { color: var(--wrong); border-color: var(--wrong-soft); background: var(--wrong-soft); }
+  .auto-next { height: 3px; background: var(--line); border-radius: 99px; overflow: hidden; margin-top: 10px; }
+  .auto-next i { display: block; height: 100%; background: var(--accent); border-radius: 99px; width: 0; }
+  .result-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 20px 0; }
+  .result-cell { background: var(--paper); border-radius: 10px; padding: 14px; text-align: center; }
+  .result-cell .rv { font-family: var(--mono); font-size: 22px; font-weight: 700; }
+  .result-cell .rk { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .review-item { display: flex; align-items: flex-start; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+  .review-item:last-child { border-bottom: none; }
+  .review-badge { flex: none; width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font-size: 11px; font-weight: 700; }
+  .review-badge.ok { background: var(--correct-soft); color: var(--correct); }
+  .review-badge.no { background: var(--wrong-soft); color: var(--wrong); }
+  .review-badge.sk { background: var(--paper); color: var(--muted); }
+  @media (max-width: 760px) {
+    .quiz-layout { grid-template-columns: 1fr; }
+    .quiz-panel { position: static; }
+    .omr-grid { grid-template-columns: repeat(8, 1fr); }
+  }
 </style>
 </head>
 <body>
@@ -262,7 +301,7 @@ function shell(title, sub, inner) {
   root.querySelectorAll(".nav").forEach(b => b.onclick = () => go(b.dataset.v));
   document.getElementById("out").onclick = () => { localStorage.removeItem("qf_token"); S = { token: null, view: "banks", bank: null }; renderAuth(); };
 }
-function go(view) { clearTimer(); S.view = view; S.bank = null; route(); }
+function go(view) { clearTimer(); clearQTimer(); S.view = view; S.bank = null; route(); }
 
 async function route() {
   try {
@@ -883,109 +922,276 @@ async function startQuiz(bankId, title, mode = "random", total = null, limitSec 
     return toast(msg, true);
   }
   const qs = await api(`/quiz/sessions/${sess.id}/questions`);
-  Q = { session: sess, title, qs, i: 0, locked: false, correct: 0,
-        deadline: limitSec ? Date.now() + limitSec * 1000 : null, timer: null };
+  Q = {
+    session: sess, title, qs, i: 0, locked: false, correct: 0,
+    deadline: limitSec ? Date.now() + limitSec * 1000 : null,
+    timer: null,
+    qtimer: null,
+    qStart: Date.now(),
+    answers: {},
+  };
   S.view = "quiz"; route();
 }
 function clearTimer() { if (Q && Q.timer) { clearInterval(Q.timer); Q.timer = null; } }
+function startQTimer() {
+  clearQTimer();
+  Q.qStart = Date.now();
+  Q.qtimer = setInterval(() => {
+    const el = document.getElementById("qtimer");
+    if (!el) { clearQTimer(); return; }
+    const sec = Math.round((Date.now() - Q.qStart) / 1000);
+    el.textContent = sec + "s";
+    el.className = "qtimer" + (sec > 30 ? " slow" : "");
+  }, 1000);
+}
+function clearQTimer() {
+  if (Q && Q.qtimer) { clearInterval(Q.qtimer); Q.qtimer = null; }
+}
 async function viewQuiz() {
   if (!Q) return go("banks");
   if (Q.i >= Q.qs.length) return quizSummary();
   const q = Q.qs[Q.i];
+  Q.qStart = Date.now();
+
+  const omrCells = Q.qs.map((_, idx) => {
+    const a = Q.answers[Q.qs[idx].id];
+    let cls = "omr-cell";
+    if (idx === Q.i) cls += " cur";
+    else if (a?.skipped) cls += " skp";
+    else if (a?.is_correct === true) cls += " hit";
+    else if (a?.is_correct === false) cls += " mis";
+    return `<div class="${cls}" data-idx="${idx}">${String(idx+1).padStart(2,"0")}</div>`;
+  }).join("");
+
+  const totalDone = Object.keys(Q.answers).length;
+  const isLast = Q.i === Q.qs.length - 1;
+
   shell("答题 · " + esc(Q.title), L("mode", Q.session.mode), `
-    <div class="card sheet">
-      <div class="qmeta"><span class="n">第 ${String(Q.i+1).padStart(2,"0")} / ${String(Q.qs.length).padStart(2,"0")} 题</span>
-        <span style="display:flex;gap:10px;align-items:center">${Q.deadline ? '<span class="pill" id="timer" style="font-family:var(--mono)">--:--</span>' : ""}<span class="pill">${L("difficulty", q.difficulty)}</span></span></div>
-      <div class="progress"><i style="width:${((Q.i+1)/Q.qs.length)*100}%"></i></div>
-      <p class="stem">${esc(q.content)}</p>
-      <div id="opts">
-        ${["A","B","C","D"].map(L => `
-          <div class="opt" data-l="${L}"><div class="bubble">${L}</div><div class="txt">${esc(q["option_"+L.toLowerCase()])}</div></div>`).join("")}
+    <div class="quiz-layout">
+      <div class="card" style="max-width:640px">
+        <div class="qmeta">
+          <span class="n">第 ${String(Q.i+1).padStart(2,"0")} / ${String(Q.qs.length).padStart(2,"0")} 题</span>
+          <span style="display:flex;gap:8px;align-items:center">
+            <span class="qtimer" id="qtimer">0s</span>
+            ${Q.deadline ? `<span class="pill" id="timer">--:--</span>` : ""}
+            <span class="pill">${L("difficulty", q.difficulty)}</span>
+          </span>
+        </div>
+        <div class="progress"><i style="width:${((Q.i+1)/Q.qs.length)*100}%"></i></div>
+        <p class="stem">${esc(q.content)}</p>
+        <div id="opts">
+          ${["A","B","C","D"].map(L2 => `
+            <div class="opt" data-l="${L2}">
+              <div class="bubble">${L2}</div>
+              <div class="txt">${esc(q["option_"+L2.toLowerCase()])}</div>
+            </div>`).join("")}
+        </div>
+        <div id="after"></div>
+        <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--line);display:flex;align-items:center;justify-content:space-between">
+          <button class="btn ghost sm" id="btn_skip">${isLast ? "直接交卷" : "跳过此题"}</button>
+          <button class="btn ghost sm" id="btn_quit" style="color:var(--wrong);border-color:var(--wrong)">放弃答题</button>
+        </div>
       </div>
-      <div id="after"></div>
-      <div style="margin-top:24px;padding-top:16px;border-top:1px solid var(--line);display:flex;align-items:center;justify-content:space-between">
-        <button class="btn ghost sm" id="btn_skip">跳过此题</button>
-        <button class="btn ghost sm" id="btn_quit" style="color:var(--wrong);border-color:var(--wrong)">放弃本次答题</button>
+      <div class="quiz-panel">
+        <h4>答题卡</h4>
+        <div class="omr-grid" id="omr">${omrCells}</div>
+        <div class="omr-legend">
+          <span><span class="omr-dot" style="background:var(--correct-soft);border:1.5px solid var(--correct)"></span>答对</span>
+          <span><span class="omr-dot" style="background:var(--wrong-soft);border:1.5px solid var(--wrong)"></span>答错</span>
+          <span><span class="omr-dot" style="background:var(--paper);border:1.5px solid var(--muted)"></span>跳过</span>
+          <span><span class="omr-dot" style="border:1.5px solid var(--line)"></span>未答</span>
+        </div>
+        <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--line)">
+          <div style="font-size:12px;color:var(--muted);margin-bottom:4px">已完成</div>
+          <div style="font-family:var(--mono);font-size:18px;font-weight:700">${totalDone}<span style="font-size:12px;color:var(--muted);font-weight:400"> / ${Q.qs.length}</span></div>
+        </div>
       </div>
     </div>`);
+
+  document.getElementById("omr").querySelectorAll(".omr-cell").forEach(cell => {
+    cell.onclick = () => { clearQTimer(); Q.i = Number(cell.dataset.idx); Q.locked = false; route(); };
+  });
+
   let pick = null;
   root.querySelectorAll(".opt").forEach(o => o.onclick = () => {
     if (Q.locked) return;
     pick = o.dataset.l;
     root.querySelectorAll(".opt").forEach(x => x.classList.toggle("pick", x === o));
-    document.getElementById("after").innerHTML = `<div class="row" style="justify-content:flex-end;margin-top:16px"><div style="flex:none"><button class="btn" id="submit">提交答案</button></div></div>`;
-    document.getElementById("submit").onclick = () => submitAnswer(q, pick);
+    submitAnswer(q, pick);
   });
-  const skipBtn = document.getElementById("btn_skip");
-  const quitBtn = document.getElementById("btn_quit");
-  const isLast = Q.i === Q.qs.length - 1;
 
-  if (skipBtn) {
-    skipBtn.textContent = isLast ? "直接交卷" : "跳过此题";
-    skipBtn.onclick = () => {
-      if (isLast) {
-        Q.i = Q.qs.length; Q.locked = false; route();
-      } else {
-        Q.i++; Q.locked = false; route();
-      }
-    };
-  }
-  if (quitBtn) {
-    quitBtn.onclick = () => {
-      if (confirm("确定放弃本次答题？进度不会保存")) {
-        clearTimer(); Q = null; go("banks");
-      }
-    };
-  }
+  document.getElementById("btn_skip").onclick = () => {
+    clearQTimer();
+    if (isLast) { Q.i = Q.qs.length; Q.locked = false; route(); }
+    else {
+      Q.answers[q.id] = Q.answers[q.id] || { skipped: true, answer: null, is_correct: null };
+      Q.i++; Q.locked = false; route();
+    }
+  };
+
+  document.getElementById("btn_quit").onclick = () => {
+    if (confirm("确定放弃本次答题？")) { clearTimer(); clearQTimer(); Q = null; go("banks"); }
+  };
+
   clearTimer();
   if (Q.deadline) {
     const tick = () => {
       const rem = Math.max(0, Math.round((Q.deadline - Date.now()) / 1000));
       const el = document.getElementById("timer");
       if (el) {
-        el.textContent = `⏱ ${String(Math.floor(rem / 60)).padStart(2, "0")}:${String(rem % 60).padStart(2, "0")}`;
+        el.textContent = `⏱ ${String(Math.floor(rem/60)).padStart(2,"0")}:${String(rem%60).padStart(2,"0")}`;
         el.style.color = rem <= 30 ? "var(--wrong)" : "";
       }
-      if (rem <= 0) { clearTimer(); toast("时间到，自动交卷"); Q.i = Q.qs.length; route(); }
+      if (rem <= 0) { clearTimer(); clearQTimer(); toast("时间到，自动交卷"); Q.i = Q.qs.length; route(); }
     };
     tick(); Q.timer = setInterval(tick, 1000);
   }
+
+  startQTimer();
+
+  const onOptKey = (e) => {
+    if (Q?.locked) return;
+    const key = e.key.toUpperCase();
+    if (!["A","B","C","D"].includes(key)) return;
+    const opt = root.querySelector(`.opt[data-l="${key}"]`);
+    if (opt) opt.click();
+    document.removeEventListener("keydown", onOptKey);
+  };
+  document.addEventListener("keydown", onOptKey);
 }
 async function submitAnswer(q, pick) {
+  if (Q.locked) return;
   Q.locked = true;
-  const res = await api(`/quiz/sessions/${Q.session.id}/answer`, { body: { question_id: q.id, user_answer: pick } });
+  clearQTimer();
+  const timeSpent = Math.round((Date.now() - Q.qStart) / 1000);
+
+  let res;
+  try {
+    res = await api(`/quiz/sessions/${Q.session.id}/answer`, {
+      body: { question_id: q.id, user_answer: pick, time_spent_seconds: timeSpent }
+    });
+  } catch(e) {
+    toast(e.message, true); Q.locked = false; startQTimer(); return;
+  }
+
   if (res.is_correct) Q.correct++;
+  Q.answers[q.id] = {
+    answer: pick, correct_answer: res.correct_answer,
+    is_correct: res.is_correct, time_spent: timeSpent,
+    content: q.content, skipped: false,
+  };
+
   root.querySelectorAll(".opt").forEach(o => {
     o.classList.add("locked"); o.classList.remove("pick");
     if (o.dataset.l === res.correct_answer) o.classList.add("correct");
     else if (o.dataset.l === pick) o.classList.add("bad");
   });
-  const last = Q.i === Q.qs.length - 1;
+
+  const isLast = Q.i === Q.qs.length - 1;
   document.getElementById("after").innerHTML = `
-    <div class="explain ${res.is_correct?"r":"w"}">
-      <b>${res.is_correct?"✓ 回答正确":"✕ 回答错误"}</b> · 正确答案 ${res.correct_answer}
-      ${q.explanation ? `<div style="margin-top:8px">${esc(q.explanation)}</div>` : ""}
+    <div class="explain ${res.is_correct?"r":"w"}" style="margin-top:14px">
+      <b>${res.is_correct ? "✓ 回答正确" : "✕ 回答错误"}</b> · 正确答案 ${res.correct_answer}
+      ${q.explanation ? `<div style="margin-top:6px;font-size:13px">${esc(q.explanation)}</div>` : ""}
     </div>
-    <div class="row" style="justify-content:flex-end;margin-top:16px"><div style="flex:none">
-      <button class="btn" id="next">${last?"查看成绩":"下一题 →"}</button></div></div>`;
-  document.getElementById("next").onclick = () => { Q.i++; Q.locked = false; route(); };
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-top:12px">
+      <div style="flex:1;margin-right:12px">
+        <div style="font-size:11px;color:var(--muted);margin-bottom:4px">1.5s 后自动跳转</div>
+        <div class="auto-next"><i id="auto_bar"></i></div>
+      </div>
+      <button class="btn sm" id="next_btn">${isLast ? "查看成绩" : "下一题 →"}</button>
+    </div>`;
+
+  const cell = document.querySelector(`.omr-cell[data-idx="${Q.i}"]`);
+  if (cell) cell.className = "omr-cell " + (res.is_correct ? "hit" : "mis");
+
+  const bar = document.getElementById("auto_bar");
+  if (bar) {
+    bar.style.transition = "width 1.5s linear";
+    requestAnimationFrame(() => { bar.style.width = "100%"; });
+  }
+
+  const autoT = setTimeout(() => { Q.i++; Q.locked = false; route(); }, 1500);
+
+  const nextBtn = document.getElementById("next_btn");
+  if (nextBtn) nextBtn.onclick = () => { clearTimeout(autoT); Q.i++; Q.locked = false; route(); };
+
+  const onKey = (e) => {
+    if (e.key === " " || e.key === "Enter") {
+      e.preventDefault();
+      clearTimeout(autoT);
+      document.removeEventListener("keydown", onKey);
+      Q.i++; Q.locked = false; route();
+    }
+  };
+  document.addEventListener("keydown", onKey);
 }
 async function quizSummary() {
-  clearTimer();
+  clearTimer(); clearQTimer();
   const fin = await api(`/quiz/sessions/${Q.session.id}/finish`, { method: "POST" });
-  const acc = fin.total_questions ? Math.round((fin.correct_count / (fin.total_questions || 1)) * 100) : 0;
-  shell("成绩单", "SESSION COMPLETE", `
-    <div class="card sheet" style="text-align:center;padding:40px">
-      <div class="muted" style="font-size:13px;letter-spacing:1px">正确率</div>
-      <div style="font-family:var(--mono);font-size:64px;font-weight:800;letter-spacing:-2px;color:${acc>=60?"var(--correct)":"var(--wrong)"}">${acc}<span style="font-size:28px">%</span></div>
-      <div class="muted" style="margin-bottom:26px">答对 ${fin.correct_count} / ${fin.total_questions} 题（已作答 ${fin.answered_count} 题）</div>
-      <div class="row" style="justify-content:center;gap:12px">
-        <div style="flex:none"><button class="btn" id="again">返回题库</button></div>
-        <div style="flex:none"><button class="btn ghost" id="towrong">查看错题本</button></div>
+  const acc = fin.answered_count === 0 ? 0 : Math.round((fin.correct_count / (fin.total_questions || 1)) * 100);
+  const wrongCount = fin.answered_count - fin.correct_count;
+  const skipped = fin.total_questions - fin.answered_count;
+  const timings = Object.values(Q.answers).filter(a => !a.skipped && a.time_spent);
+  const avgTime = timings.length ? Math.round(timings.reduce((s,a) => s + a.time_spent, 0) / timings.length) : 0;
+
+  const reviewRows = Q.qs.map((q, idx) => {
+    const a = Q.answers[q.id];
+    if (!a || a.skipped) return `
+      <div class="review-item">
+        <div class="review-badge sk">—</div>
+        <div style="flex:1">
+          <div style="font-size:13px;color:var(--muted)">${String(idx+1).padStart(2,"0")}. ${esc(q.content.substring(0,50))}${q.content.length>50?"…":""}</div>
+          <div style="font-size:12px;color:var(--muted);margin-top:2px">已跳过</div>
+        </div>
+      </div>`;
+    return `
+      <div class="review-item">
+        <div class="review-badge ${a.is_correct?"ok":"no"}">${a.is_correct?"✓":"✕"}</div>
+        <div style="flex:1">
+          <div style="font-size:13px">${String(idx+1).padStart(2,"0")}. ${esc(q.content.substring(0,50))}${q.content.length>50?"…":""}</div>
+          <div style="font-size:12px;color:var(--muted);margin-top:3px">
+            我选：<b style="color:${a.is_correct?"var(--correct)":"var(--wrong)"}">${a.answer}</b>
+            ${!a.is_correct?` · 正确：<b style="color:var(--correct)">${a.correct_answer}</b>`:""}
+            · 用时 ${a.time_spent}s
+          </div>
+        </div>
+      </div>`;
+  }).join("");
+
+  const hasWrong = Object.values(Q.answers).some(a => a.is_correct === false);
+  const savedBank = S.bank; const savedTitle = Q.title; const savedMode = Q.session.mode;
+
+  shell("成绩单", "本次成绩", `
+    <div style="max-width:700px">
+      <div style="text-align:center;padding:28px 20px 16px">
+        <div style="font-size:12px;color:var(--muted);letter-spacing:1px;margin-bottom:6px">正确率</div>
+        <div style="font-family:var(--mono);font-size:72px;font-weight:800;letter-spacing:-3px;line-height:1;color:${acc>=60?"var(--correct)":"var(--wrong)"}">${acc}<span style="font-size:28px">%</span></div>
+        <div style="font-size:14px;color:var(--muted);margin-top:8px">${esc(savedTitle)}</div>
       </div>
+      <div class="result-grid">
+        <div class="result-cell"><div class="rv" style="color:var(--correct)">${fin.correct_count}</div><div class="rk">答对</div></div>
+        <div class="result-cell"><div class="rv" style="color:var(--wrong)">${wrongCount}</div><div class="rk">答错</div></div>
+        <div class="result-cell"><div class="rv" style="color:var(--muted)">${skipped}</div><div class="rk">跳过</div></div>
+        <div class="result-cell"><div class="rv">${fin.answered_count} / ${fin.total_questions}</div><div class="rk">作答 / 总题</div></div>
+        <div class="result-cell"><div class="rv">${avgTime > 0 ? avgTime + "s" : "—"}</div><div class="rk">平均用时/题</div></div>
+        <div class="result-cell"><div class="rv" style="color:${acc>=90?"var(--correct)":acc>=60?"var(--ink)":"var(--wrong)"}">${acc>=90?"优秀":acc>=75?"良好":acc>=60?"及格":"待加强"}</div><div class="rk">评级</div></div>
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:24px">
+        <button class="btn" id="btn_back">返回题库</button>
+        ${hasWrong ? `<button class="btn ghost" id="btn_rewrong">复习本次错题</button>` : ""}
+        <button class="btn ghost" id="btn_retry">再来一次</button>
+        <button class="btn ghost" id="btn_towrong">错题本</button>
+      </div>
+      <div style="font-weight:600;font-size:15px;margin-bottom:12px">答题明细</div>
+      <div class="card" style="padding:4px 16px">${reviewRows}</div>
     </div>`);
-  document.getElementById("again").onclick = () => { Q = null; go("banks"); };
-  document.getElementById("towrong").onclick = () => { Q = null; go("wrong"); };
+
+  Q = null;
+  document.getElementById("btn_back").onclick = () => go("banks");
+  document.getElementById("btn_towrong").onclick = () => go("wrong");
+  document.getElementById("btn_retry").onclick = () => startQuiz(savedBank, savedTitle, savedMode);
+  const rewrong = document.getElementById("btn_rewrong");
+  if (rewrong) rewrong.onclick = () => startQuiz(savedBank, savedTitle, "wrong_only");
 }
 
 /* ---------------- 错题本 ---------------- */
