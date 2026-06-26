@@ -1,0 +1,25 @@
+# secrets / env
+.env
+backend/.env
+*.local
+
+# python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+
+# uploads (keep dir, ignore contents)
+backend/uploads/*
+!backend/uploads/.gitkeep
+
+# runtime / data
+dump.rdb
+*.log
+.playwright-mcp/
+
+# os / editor
+.DS_Store
+.idea/
+.vscode/

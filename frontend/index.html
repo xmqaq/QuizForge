@@ -1,0 +1,516 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>QuizForge · 智能题库</title>
+<style>
+  :root {
+    --paper: #F4F5F7;
+    --card: #FFFFFF;
+    --ink: #1A1C22;
+    --muted: #6B7280;
+    --line: #E3E5EA;
+    --accent: #2F4BFF;
+    --accent-soft: #E9ECFF;
+    --correct: #1E9E6A;
+    --correct-soft: #E4F4ED;
+    --wrong: #E5484D;
+    --wrong-soft: #FBE9EA;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    --sans: "Inter", system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0; font-family: var(--sans); color: var(--ink);
+    background: var(--paper); line-height: 1.5;
+    font-feature-settings: "tnum" 1;
+  }
+  button { font-family: inherit; cursor: pointer; }
+  input, select, textarea { font-family: inherit; font-size: 14px; }
+  a { color: var(--accent); }
+
+  /* ---------- shell ---------- */
+  .app { display: grid; grid-template-columns: 232px 1fr; min-height: 100vh; }
+  .rail {
+    background: var(--ink); color: #C7CAD1; padding: 22px 16px;
+    display: flex; flex-direction: column; gap: 4px; position: sticky; top: 0; height: 100vh;
+  }
+  .brand { display: flex; align-items: center; gap: 11px; padding: 4px 8px 22px; }
+  .brand .mark {
+    width: 34px; height: 34px; border-radius: 9px; background: var(--accent);
+    display: grid; place-items: center; color: #fff; font-weight: 800; font-size: 17px;
+    box-shadow: 0 0 0 4px rgba(47,75,255,.18);
+  }
+  .brand b { color: var(--ink); font-size: 17px; letter-spacing: .2px; }
+  .rail .brand b { color: #fff; }
+  .brand span { display: block; font-size: 11px; color: #7E8390; font-family: var(--mono); letter-spacing: 1px; }
+  .nav { display: flex; align-items: center; gap: 11px; padding: 10px 12px; border-radius: 9px;
+    color: #C7CAD1; font-size: 14px; font-weight: 500; border: none; background: none; width: 100%; text-align: left; }
+  .nav .ic { width: 18px; text-align: center; opacity: .85; }
+  .nav:hover { background: rgba(255,255,255,.06); color: #fff; }
+  .nav.on { background: var(--accent); color: #fff; }
+  .rail .spacer { flex: 1; }
+  .who { font-size: 13px; color: #9398A4; padding: 12px 8px 4px; border-top: 1px solid rgba(255,255,255,.08); }
+  .who b { color: #fff; }
+  .signout { margin-top: 8px; font-size: 12px; color: #9398A4; background: none; border: 1px solid rgba(255,255,255,.12);
+    padding: 7px 10px; border-radius: 8px; }
+  .signout:hover { color: #fff; border-color: rgba(255,255,255,.3); }
+
+  .main { padding: 34px 40px 60px; max-width: 980px; }
+  .head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 22px; }
+  .head h1 { font-size: 25px; margin: 0; letter-spacing: -.4px; }
+  .head .sub { color: var(--muted); font-size: 13px; font-family: var(--mono); }
+
+  /* ---------- pieces ---------- */
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 20px; }
+  .grid { display: grid; gap: 14px; }
+  .cols { grid-template-columns: repeat(auto-fill, minmax(248px, 1fr)); }
+  .btn { background: var(--accent); color: #fff; border: none; padding: 10px 16px; border-radius: 9px;
+    font-weight: 600; font-size: 14px; }
+  .btn:hover { filter: brightness(1.07); }
+  .btn:disabled { opacity: .5; cursor: not-allowed; filter: none; }
+  .btn.ghost { background: var(--card); color: var(--ink); border: 1px solid var(--line); }
+  .btn.ghost:hover { border-color: var(--ink); filter: none; }
+  .btn.sm { padding: 7px 12px; font-size: 13px; }
+  label.f { display: block; font-size: 12px; font-weight: 600; color: var(--muted); margin: 0 0 6px; letter-spacing: .2px; }
+  .in { width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 9px; background: #fff; color: var(--ink); }
+  .in:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .row { display: flex; gap: 12px; flex-wrap: wrap; }
+  .row > * { flex: 1; min-width: 120px; }
+  .pill { font-family: var(--mono); font-size: 11px; padding: 3px 9px; border-radius: 999px; background: var(--paper);
+    border: 1px solid var(--line); color: var(--muted); letter-spacing: .3px; }
+  .pill.ok { background: var(--correct-soft); color: var(--correct); border-color: transparent; }
+  .pill.warn { background: #FFF3E0; color: #B26A00; border-color: transparent; }
+  .muted { color: var(--muted); }
+  .empty { text-align: center; padding: 50px 20px; color: var(--muted); }
+  .empty .big { font-size: 30px; margin-bottom: 10px; opacity: .5; }
+  .toast { position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%);
+    background: var(--ink); color: #fff; padding: 11px 18px; border-radius: 10px; font-size: 14px;
+    box-shadow: 0 8px 30px rgba(0,0,0,.2); opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s; z-index: 50; }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(-4px); }
+  .toast.err { background: var(--wrong); }
+
+  /* ---------- bank card ---------- */
+  .bank { cursor: pointer; transition: transform .12s, box-shadow .12s; }
+  .bank:hover { transform: translateY(-2px); box-shadow: 0 10px 28px rgba(26,28,34,.08); border-color: #cfd3da; }
+  .bank h3 { margin: 0 0 6px; font-size: 16px; }
+  .bank .desc { font-size: 13px; color: var(--muted); min-height: 20px; margin-bottom: 14px; }
+  .bank .meta { display: flex; align-items: center; gap: 8px; }
+  .count { font-family: var(--mono); font-size: 22px; font-weight: 700; }
+  .count small { font-size: 11px; color: var(--muted); font-weight: 400; margin-left: 3px; }
+
+  /* ---------- 答题卡 / OMR signature ---------- */
+  .sheet { max-width: 640px; }
+  .qmeta { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+  .qmeta .n { font-family: var(--mono); font-size: 13px; color: var(--muted); letter-spacing: 1px; }
+  .progress { height: 6px; background: var(--line); border-radius: 99px; overflow: hidden; margin-bottom: 22px; }
+  .progress i { display: block; height: 100%; background: var(--accent); border-radius: 99px; transition: width .3s; }
+  .stem { font-size: 18px; line-height: 1.55; margin: 0 0 22px; font-weight: 500; }
+  .opt { display: flex; align-items: center; gap: 14px; padding: 13px 15px; border: 1.5px solid var(--line);
+    border-radius: 11px; margin-bottom: 10px; background: #fff; cursor: pointer; transition: border-color .12s, background .12s; }
+  .opt:hover { border-color: #b9bdc6; }
+  .opt .bubble {
+    flex: none; width: 30px; height: 30px; border-radius: 50%; border: 2px solid #C2C6CE;
+    display: grid; place-items: center; font-family: var(--mono); font-weight: 700; font-size: 14px; color: var(--muted);
+    transition: all .12s;
+  }
+  .opt .txt { font-size: 15px; }
+  .opt.pick { border-color: var(--accent); background: var(--accent-soft); }
+  .opt.pick .bubble { background: var(--ink); border-color: var(--ink); color: #fff; }
+  .opt.correct { border-color: var(--correct); background: var(--correct-soft); }
+  .opt.correct .bubble { background: var(--correct); border-color: var(--correct); color: #fff; }
+  .opt.bad { border-color: var(--wrong); background: var(--wrong-soft); }
+  .opt.bad .bubble { background: var(--wrong); border-color: var(--wrong); color: #fff; }
+  .opt.locked { cursor: default; }
+  .explain { margin-top: 6px; padding: 14px 16px; border-radius: 11px; background: var(--paper);
+    border-left: 3px solid var(--accent); font-size: 14px; color: #353841; }
+  .explain.r { border-left-color: var(--correct); }
+  .explain.w { border-left-color: var(--wrong); }
+
+  /* ---------- stats ---------- */
+  .stat { padding: 18px 20px; }
+  .stat .v { font-family: var(--mono); font-size: 30px; font-weight: 700; letter-spacing: -1px; }
+  .stat .k { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .bar { height: 8px; background: var(--line); border-radius: 99px; overflow: hidden; margin-top: 6px; }
+  .bar i { display: block; height: 100%; background: var(--accent); }
+
+  /* ---------- auth ---------- */
+  .auth { min-height: 100vh; display: grid; place-items: center; padding: 24px;
+    background: radial-gradient(120% 90% at 50% -10%, #fff 0%, var(--paper) 60%); }
+  .authcard { width: 100%; max-width: 380px; }
+  .authcard .brand { justify-content: center; padding-bottom: 26px; }
+  .tabs { display: flex; background: var(--paper); border-radius: 10px; padding: 4px; margin-bottom: 18px; }
+  .tabs button { flex: 1; border: none; background: none; padding: 9px; border-radius: 7px; font-weight: 600; font-size: 14px; color: var(--muted); }
+  .tabs button.on { background: #fff; color: var(--ink); box-shadow: 0 1px 4px rgba(0,0,0,.08); }
+  .fld { margin-bottom: 14px; }
+
+  @media (max-width: 760px) {
+    .app { grid-template-columns: 1fr; }
+    .rail { position: static; height: auto; flex-direction: row; flex-wrap: wrap; align-items: center; }
+    .rail .brand { padding: 4px 8px; } .rail .spacer, .who { display: none; }
+    .nav { width: auto; }
+    .main { padding: 22px 18px 50px; }
+  }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<div id="toast" class="toast"></div>
+
+<script>
+const API = "http://localhost:8000/api/v1";
+const root = document.getElementById("root");
+let S = { token: localStorage.getItem("qf_token"), user: null, view: "banks", bank: null };
+
+/* ---------------- api helper ---------------- */
+async function api(path, { method, body, form } = {}) {
+  method = method || (body !== undefined || form ? "POST" : "GET");
+  const headers = {};
+  if (S.token) headers.Authorization = "Bearer " + S.token;
+  let payload;
+  if (form) { payload = form; }
+  else if (body !== undefined) { headers["Content-Type"] = "application/json"; payload = JSON.stringify(body); }
+  const r = await fetch(API + path, { method, headers, body: payload });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(data.detail ? (typeof data.detail === "string" ? data.detail : JSON.stringify(data.detail)) : "请求失败 " + r.status);
+  return data;
+}
+function toast(msg, err) {
+  const t = document.getElementById("toast");
+  t.textContent = msg; t.className = "toast show" + (err ? " err" : "");
+  clearTimeout(t._t); t._t = setTimeout(() => (t.className = "toast"), 2600);
+}
+const esc = (s) => (s ?? "").toString().replace(/[&<>"]/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;" }[c]));
+
+/* ---------------- auth ---------------- */
+function renderAuth() {
+  let tab = "login";
+  const draw = () => {
+    root.innerHTML = `
+    <div class="auth"><div class="card authcard">
+      <div class="brand"><div class="mark">Q</div><div><b>QuizForge</b><span>智能题库系统</span></div></div>
+      <div class="tabs">
+        <button id="t-login" class="${tab==="login"?"on":""}">登录</button>
+        <button id="t-reg" class="${tab==="reg"?"on":""}">注册</button>
+      </div>
+      <form id="af">
+        ${tab==="reg" ? `<div class="fld"><label class="f">用户名</label><input class="in" id="username" required minlength="2"></div>` : ""}
+        <div class="fld"><label class="f">邮箱</label><input class="in" id="email" type="email" required placeholder="you@example.com"></div>
+        <div class="fld"><label class="f">密码</label><input class="in" id="password" type="password" required minlength="6"></div>
+        <button class="btn" style="width:100%" type="submit">${tab==="reg"?"创建账号":"登录"}</button>
+      </form>
+    </div></div>`;
+    document.getElementById("t-login").onclick = () => { tab = "login"; draw(); };
+    document.getElementById("t-reg").onclick = () => { tab = "reg"; draw(); };
+    document.getElementById("af").onsubmit = async (e) => {
+      e.preventDefault();
+      const email = email_.value, password = password_.value;
+      try {
+        if (tab === "reg") {
+          await api("/auth/register", { body: { email, username: username_.value, password } });
+          toast("注册成功，正在登录…");
+        }
+        const fd = new URLSearchParams({ username: email, password });
+        const r = await fetch(API + "/auth/login", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: fd });
+        const d = await r.json();
+        if (!r.ok) throw new Error(d.detail || "登录失败");
+        S.token = d.access_token; localStorage.setItem("qf_token", S.token);
+        await boot();
+      } catch (err) { toast(err.message, true); }
+    };
+    // shorthand refs
+    window.email_ = document.getElementById("email");
+    window.password_ = document.getElementById("password");
+    window.username_ = document.getElementById("username");
+  };
+  draw();
+}
+
+/* ---------------- app shell ---------------- */
+const NAV = [
+  ["banks", "题库", "▦"], ["wrong", "错题本", "✕"], ["stats", "统计", "▤"],
+];
+function shell(title, sub, inner) {
+  root.innerHTML = `
+  <div class="app">
+    <aside class="rail">
+      <div class="brand"><div class="mark">Q</div><div><b>QuizForge</b><span>智能题库系统</span></div></div>
+      ${NAV.map(([v,l,ic]) => `<button class="nav ${S.view===v?"on":""}" data-v="${v}"><span class="ic">${ic}</span>${l}</button>`).join("")}
+      <div class="spacer"></div>
+      <div class="who">登录为 <b>${esc(S.user?.username)}</b><br><span style="font-family:var(--mono);font-size:11px">${esc(S.user?.role)}</span></div>
+      <button class="signout" id="out">退出登录</button>
+    </aside>
+    <main class="main">
+      <div class="head"><h1>${title}</h1><div class="sub">${sub||""}</div></div>
+      <div id="body">${inner}</div>
+    </main>
+  </div>`;
+  root.querySelectorAll(".nav").forEach(b => b.onclick = () => go(b.dataset.v));
+  document.getElementById("out").onclick = () => { localStorage.removeItem("qf_token"); S = { token: null, view: "banks", bank: null }; renderAuth(); };
+}
+function go(view) { S.view = view; S.bank = null; route(); }
+
+async function route() {
+  try {
+    if (S.view === "banks") return await viewBanks();
+    if (S.view === "bank") return await viewBankDetail();
+    if (S.view === "quiz") return await viewQuiz();
+    if (S.view === "wrong") return await viewWrong();
+    if (S.view === "stats") return await viewStats();
+  } catch (e) { toast(e.message, true); }
+}
+
+/* ---------------- 题库 list ---------------- */
+async function viewBanks() {
+  const { items } = await api("/banks?size=100");
+  const cards = items.length ? items.map(b => `
+    <div class="card bank" data-id="${b.id}">
+      <div class="meta" style="margin-bottom:10px">
+        <span class="pill ${b.status==="published"?"ok":""}">${b.status}</span>
+        ${b.is_public ? `<span class="pill">公开</span>` : ""}
+      </div>
+      <h3>${esc(b.title)}</h3>
+      <div class="desc">${esc(b.description) || "—"}</div>
+      <div class="meta"><span class="count">${b.question_count}<small>题</small></span></div>
+    </div>`).join("") : `<div class="empty" style="grid-column:1/-1"><div class="big">▦</div>还没有题库，新建一个开始吧</div>`;
+  shell("题库", `${items.length} BANKS`,
+    `<div style="margin-bottom:18px"><button class="btn" id="new">＋ 新建题库</button></div>
+     <div class="grid cols">${cards}</div>`);
+  document.getElementById("new").onclick = newBankForm;
+  document.querySelectorAll(".bank").forEach(c => c.onclick = () => { S.bank = c.dataset.id; S.view = "bank"; route(); });
+}
+function newBankForm() {
+  const body = document.getElementById("body");
+  body.insertAdjacentHTML("afterbegin", `
+    <div class="card" id="nbf" style="margin-bottom:18px">
+      <div class="row"><div style="flex:2"><label class="f">标题</label><input class="in" id="nb_title" placeholder="如：网络安全基础"></div>
+      <div style="flex:3"><label class="f">描述（可选）</label><input class="in" id="nb_desc"></div></div>
+      <div class="row" style="margin-top:12px;justify-content:flex-end"><div style="flex:none"><button class="btn sm" id="nb_save">创建</button>
+      <button class="btn ghost sm" id="nb_cancel">取消</button></div></div>
+    </div>`);
+  document.getElementById("nb_cancel").onclick = () => document.getElementById("nbf").remove();
+  document.getElementById("nb_save").onclick = async () => {
+    const title = document.getElementById("nb_title").value.trim();
+    if (!title) return toast("请填写标题", true);
+    await api("/banks", { body: { title, description: document.getElementById("nb_desc").value.trim() || null, status: "published" } });
+    toast("题库已创建"); viewBanks();
+  };
+}
+
+/* ---------------- 题库详情 + AI 出题 ---------------- */
+async function viewBankDetail() {
+  const b = await api("/banks/" + S.bank);
+  const { items } = await api("/questions?bank_id=" + S.bank + "&size=100");
+  const qlist = items.length ? items.map((q, i) => `
+    <div class="card" style="margin-bottom:10px">
+      <div class="meta" style="margin-bottom:8px">
+        <span class="pill">${String(i+1).padStart(2,"0")}</span>
+        <span class="pill ${q.status==="approved"?"ok":"warn"}">${q.status}</span>
+        <span class="pill">${q.difficulty}</span>
+        <span class="pill">答案 ${q.correct_answer}</span>
+      </div>
+      <div style="font-weight:500">${esc(q.content)}</div>
+    </div>`).join("") : `<div class="empty"><div class="big">✎</div>这个题库还没有题目，用 AI 生成一批</div>`;
+  shell(esc(b.title), `${b.question_count} 题`,
+    `<div class="row" style="margin-bottom:20px;flex:none">
+       <div style="flex:none"><button class="btn" id="start" ${b.question_count?"":"disabled"}>开始答题</button>
+       <button class="btn ghost" id="back">← 返回题库</button></div></div>
+     <div class="card" style="margin-bottom:24px">
+       <div style="font-weight:700;margin-bottom:14px">⚡ AI 出题</div>
+       <div class="row">
+         <div style="flex:3"><label class="f">知识点 / 主题</label><input class="in" id="ai_topic" placeholder="如：SQL 注入攻击原理与防御"></div>
+         <div><label class="f">难度</label><select class="in" id="ai_diff"><option value="easy">基础</option><option value="medium" selected>进阶</option><option value="hard">综合</option></select></div>
+         <div><label class="f">数量</label><input class="in" id="ai_count" type="number" value="5" min="1" max="20"></div>
+       </div>
+       <div class="row" style="margin-top:12px;align-items:center">
+         <label style="flex:none;font-size:13px;color:var(--muted)"><input type="checkbox" id="ai_auto" checked> 自动审核通过</label>
+         <div style="flex:1"></div>
+         <div style="flex:none"><button class="btn" id="ai_go">生成题目</button></div>
+       </div>
+       <div style="border-top:1px dashed var(--line);margin:16px 0 0;padding-top:14px">
+         <label class="f">或：上传文档出题 <span class="muted" style="font-weight:400">(pdf / docx / txt / md，复用上面的难度与数量)</span></label>
+         <div class="row" style="align-items:center">
+           <input class="in" id="ai_file" type="file" accept=".pdf,.docx,.txt,.md" style="flex:3">
+           <div style="flex:none"><button class="btn ghost" id="ai_file_go">上传并出题</button></div>
+         </div>
+       </div>
+       <div id="ai_prog" style="display:none;margin-top:16px">
+         <div class="progress"><i id="ai_bar" style="width:0"></i></div>
+         <div class="muted" id="ai_msg" style="font-size:13px;margin-top:8px"></div>
+       </div>
+     </div>
+     <div>${qlist}</div>`);
+  document.getElementById("back").onclick = () => go("banks");
+  document.getElementById("start").onclick = () => startQuiz(S.bank, b.title);
+  document.getElementById("ai_go").onclick = runAI;
+  document.getElementById("ai_file_go").onclick = runAIFile;
+}
+
+// shared task polling for both AI generation paths
+async function pollGenerate(task_id) {
+  const bar = document.getElementById("ai_bar"), msg = document.getElementById("ai_msg");
+  for (let i = 0; i < 40; i++) {
+    await new Promise(r => setTimeout(r, 1500));
+    let st; try { st = await api("/ai/task/" + task_id); } catch { continue; }
+    const pct = st.total ? Math.round((st.generated / st.total) * 100) : st.progress || 0;
+    bar.style.width = Math.max(pct, st.status === "processing" ? 8 : pct) + "%";
+    msg.textContent = `${st.status} · 已生成 ${st.generated || 0}/${st.total || "?"}`;
+    if (st.status === "done") { bar.style.width = "100%"; toast(`生成 ${st.generated} 道题`); return viewBankDetail(); }
+    if (st.status === "failed") throw new Error(st.error_message || "生成失败");
+  }
+  throw new Error("任务超时，请稍后在题库查看");
+}
+
+async function runAIFile() {
+  const f = document.getElementById("ai_file").files[0];
+  if (!f) return toast("请先选择文件", true);
+  const btn = document.getElementById("ai_file_go"); btn.disabled = true;
+  const prog = document.getElementById("ai_prog"), msg = document.getElementById("ai_msg");
+  prog.style.display = "block"; msg.textContent = "上传并解析文件…";
+  try {
+    const fd = new FormData();
+    fd.append("bank_id", S.bank);
+    fd.append("difficulty", document.getElementById("ai_diff").value);
+    fd.append("count", document.getElementById("ai_count").value);
+    fd.append("auto_approve", document.getElementById("ai_auto").checked);
+    fd.append("file", f);
+    const { task_id } = await api("/ai/generate-from-file", { form: fd });
+    await pollGenerate(task_id);
+  } catch (e) { toast(e.message, true); msg.textContent = "✕ " + e.message; }
+  finally { btn.disabled = false; }
+}
+
+async function runAI() {
+  const topic = document.getElementById("ai_topic").value.trim();
+  if (!topic) return toast("请填写主题", true);
+  const btn = document.getElementById("ai_go"); btn.disabled = true;
+  const prog = document.getElementById("ai_prog"), bar = document.getElementById("ai_bar"), msg = document.getElementById("ai_msg");
+  prog.style.display = "block"; msg.textContent = "提交任务…";
+  try {
+    const { task_id } = await api("/ai/generate", { body: {
+      bank_id: S.bank, topic, difficulty: document.getElementById("ai_diff").value,
+      count: Number(document.getElementById("ai_count").value), auto_approve: document.getElementById("ai_auto").checked,
+    }});
+    await pollGenerate(task_id);
+  } catch (e) { toast(e.message, true); msg.textContent = "✕ " + e.message; }
+  finally { btn.disabled = false; }
+}
+
+/* ---------------- 答题 ---------------- */
+let Q = null; // active quiz state
+async function startQuiz(bankId, title) {
+  const mode = "random";
+  const sess = await api("/quiz/sessions", { body: { bank_id: bankId, mode } });
+  const qs = await api(`/quiz/sessions/${sess.id}/questions`);
+  Q = { session: sess, title, qs, i: 0, locked: false, correct: 0 };
+  S.view = "quiz"; route();
+}
+async function viewQuiz() {
+  if (!Q) return go("banks");
+  if (Q.i >= Q.qs.length) return quizSummary();
+  const q = Q.qs[Q.i];
+  shell("答题 · " + esc(Q.title), `${Q.session.mode.toUpperCase()}`, `
+    <div class="card sheet">
+      <div class="qmeta"><span class="n">第 ${String(Q.i+1).padStart(2,"0")} / ${String(Q.qs.length).padStart(2,"0")} 题</span>
+        <span class="pill">${q.difficulty}</span></div>
+      <div class="progress"><i style="width:${(Q.i/Q.qs.length)*100}%"></i></div>
+      <p class="stem">${esc(q.content)}</p>
+      <div id="opts">
+        ${["A","B","C","D"].map(L => `
+          <div class="opt" data-l="${L}"><div class="bubble">${L}</div><div class="txt">${esc(q["option_"+L.toLowerCase()])}</div></div>`).join("")}
+      </div>
+      <div id="after"></div>
+    </div>`);
+  let pick = null;
+  root.querySelectorAll(".opt").forEach(o => o.onclick = () => {
+    if (Q.locked) return;
+    pick = o.dataset.l;
+    root.querySelectorAll(".opt").forEach(x => x.classList.toggle("pick", x === o));
+    document.getElementById("after").innerHTML = `<div class="row" style="justify-content:flex-end;margin-top:16px"><div style="flex:none"><button class="btn" id="submit">提交答案</button></div></div>`;
+    document.getElementById("submit").onclick = () => submitAnswer(q, pick);
+  });
+}
+async function submitAnswer(q, pick) {
+  Q.locked = true;
+  const res = await api(`/quiz/sessions/${Q.session.id}/answer`, { body: { question_id: q.id, user_answer: pick } });
+  if (res.is_correct) Q.correct++;
+  root.querySelectorAll(".opt").forEach(o => {
+    o.classList.add("locked"); o.classList.remove("pick");
+    if (o.dataset.l === res.correct_answer) o.classList.add("correct");
+    else if (o.dataset.l === pick) o.classList.add("bad");
+  });
+  const last = Q.i === Q.qs.length - 1;
+  document.getElementById("after").innerHTML = `
+    <div class="explain ${res.is_correct?"r":"w"}">
+      <b>${res.is_correct?"✓ 回答正确":"✕ 回答错误"}</b> · 正确答案 ${res.correct_answer}
+      ${q.explanation ? `<div style="margin-top:8px">${esc(q.explanation)}</div>` : ""}
+    </div>
+    <div class="row" style="justify-content:flex-end;margin-top:16px"><div style="flex:none">
+      <button class="btn" id="next">${last?"查看成绩":"下一题 →"}</button></div></div>`;
+  document.getElementById("next").onclick = () => { Q.i++; Q.locked = false; route(); };
+}
+async function quizSummary() {
+  const fin = await api(`/quiz/sessions/${Q.session.id}/finish`, { method: "POST" });
+  const acc = fin.total_questions ? Math.round((fin.correct_count / fin.answered_count) * 100) : 0;
+  shell("成绩单", "SESSION COMPLETE", `
+    <div class="card sheet" style="text-align:center;padding:40px">
+      <div class="muted" style="font-size:13px;letter-spacing:1px">正确率</div>
+      <div style="font-family:var(--mono);font-size:64px;font-weight:800;letter-spacing:-2px;color:${acc>=60?"var(--correct)":"var(--wrong)"}">${acc}<span style="font-size:28px">%</span></div>
+      <div class="muted" style="margin-bottom:26px">答对 ${fin.correct_count} / ${fin.answered_count} 题</div>
+      <div class="row" style="justify-content:center"><div style="flex:none">
+        <button class="btn" id="again">返回题库</button>
+        <button class="btn ghost" id="towrong">查看错题本</button></div></div>
+    </div>`);
+  document.getElementById("again").onclick = () => { Q = null; go("banks"); };
+  document.getElementById("towrong").onclick = () => { Q = null; go("wrong"); };
+}
+
+/* ---------------- 错题本 ---------------- */
+async function viewWrong() {
+  const list = await api("/wrong");
+  const rows = list.length ? list.map(w => `
+    <div class="card" style="margin-bottom:10px">
+      <div class="meta" style="margin-bottom:8px">
+        <span class="pill ${w.is_mastered?"ok":"warn"}">${w.is_mastered?"已掌握":"待复习"}</span>
+        <span class="pill">错 ${w.wrong_count} 次</span>
+        <span class="pill">答案 ${w.question.correct_answer}</span>
+      </div>
+      <div style="font-weight:500;margin-bottom:10px">${esc(w.question.content)}</div>
+      ${w.question.explanation ? `<div class="explain" style="margin-bottom:10px">${esc(w.question.explanation)}</div>` : ""}
+      ${w.is_mastered ? "" : `<button class="btn ghost sm" data-q="${w.question_id}">标记已掌握</button>`}
+    </div>`).join("") : `<div class="empty"><div class="big">✓</div>错题本是空的，继续保持</div>`;
+  shell("错题本", `${list.length} ITEMS`, rows);
+  root.querySelectorAll("[data-q]").forEach(b => b.onclick = async () => {
+    await api(`/wrong/${b.dataset.q}/master`, { method: "POST" }); toast("已标记掌握"); viewWrong();
+  });
+}
+
+/* ---------------- 统计 ---------------- */
+async function viewStats() {
+  const o = await api("/stats/overview");
+  const accPct = Math.round((o.accuracy || 0) * 100);
+  shell("学习统计", "OVERVIEW", `
+    <div class="grid cols" style="margin-bottom:20px">
+      <div class="card stat"><div class="v">${o.sessions}</div><div class="k">答题会话</div></div>
+      <div class="card stat"><div class="v">${o.total_answers}</div><div class="k">累计作答</div></div>
+      <div class="card stat"><div class="v" style="color:${accPct>=60?"var(--correct)":"var(--ink)"}">${accPct}%</div><div class="k">总正确率</div>
+        <div class="bar"><i style="width:${accPct}%"></i></div></div>
+      <div class="card stat"><div class="v" style="color:var(--wrong)">${o.wrong_unmastered}</div><div class="k">待复习错题</div></div>
+      <div class="card stat"><div class="v">${o.banks_created}</div><div class="k">我创建的题库</div></div>
+    </div>`);
+}
+
+/* ---------------- boot ---------------- */
+async function boot() {
+  try {
+    S.user = await api("/auth/me");
+    S.view = S.view || "banks"; route();
+  } catch { localStorage.removeItem("qf_token"); S.token = null; renderAuth(); }
+}
+if (S.token) boot(); else renderAuth();
+</script>
+</body>
+</html>
