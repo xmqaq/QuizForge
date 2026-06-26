@@ -10,7 +10,7 @@ class GenerateRequest(BaseModel):
     topic: str = Field(examples=["SQL注入攻击原理与防御"])
     difficulty: Difficulty = Difficulty.medium
     count: int = Field(default=10, ge=1, le=100)
-    auto_approve: bool = False
+    auto_approve: bool = True
 
 
 class GenerateResponse(BaseModel):

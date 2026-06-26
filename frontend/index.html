@@ -242,7 +242,7 @@ function renderAuth() {
 
 /* ---------------- app shell ---------------- */
 const NAV = [
-  ["banks", "题库", "▦"], ["wrong", "错题本", "✕"], ["stats", "统计", "▤"],
+  ["banks", "题库", "▦"], ["wrong", "错题本", "✕"], ["stats", "统计", "▤"], ["plan", "学习计划", "▷"],
 ];
 function shell(title, sub, inner) {
   root.innerHTML = `
@@ -271,6 +271,7 @@ async function route() {
     if (S.view === "quiz") return await viewQuiz();
     if (S.view === "wrong") return await viewWrong();
     if (S.view === "stats") return await viewStats();
+    if (S.view === "plan") return await viewPlan();
   } catch (e) { toast(e.message, true); }
 }
 
@@ -279,7 +280,7 @@ async function viewBanks() {
   const { items } = await api("/banks?size=100");
   let filter = "";
   const render = (ind) => {
-    const filtered = ind ? items.filter(b => b.industry === ind) : items;
+    const filtered = items;  // 接口已按 industry 过滤
     const cards = filtered.length ? filtered.map(b => `
       <div class="card bank" data-id="${b.id}" data-industry="${b.industry||''}">
         <div class="meta" style="margin-bottom:10px;justify-content:space-between">
@@ -296,7 +297,27 @@ async function viewBanks() {
         <div class="desc">${esc(b.description) || "—"}</div>
         <div class="meta"><span class="count">${b.question_count}<small>题</small></span></div>
       </div>`).join("") :
-      `<div class="empty" style="grid-column:1/-1"><div class="big">▦</div>没有匹配的题库</div>`;
+      (ind
+        ? `<div class="empty" style="grid-column:1/-1"><div class="big">▦</div>没有匹配的题库</div>`
+        : `<div style="grid-column:1/-1;padding:40px 0">
+  <div style="max-width:480px;margin:0 auto">
+    <div style="font-size:24px;text-align:center;margin-bottom:20px;opacity:.4">▦</div>
+    <div style="font-size:16px;font-weight:600;text-align:center;margin-bottom:8px">还没有题库</div>
+    <div style="font-size:13px;color:var(--muted);text-align:center;margin-bottom:24px">三步开始你的学习之旅</div>
+    <div style="display:flex;flex-direction:column;gap:10px">
+      ${[
+        ["① 新建题库", "按行业分类创建你的专属题库", "new"],
+        ["② AI 生成题目", "输入知识点，AI 自动出题或上传文档生成", null],
+        ["③ 开始答题练习", "错题自动记录，智能追踪学习进度", null],
+      ].map(([t, d, action]) => `
+        <div class="card" style="display:flex;align-items:center;gap:14px;padding:14px 16px">
+          <div style="font-weight:600;font-size:14px;min-width:120px">${t}</div>
+          <div style="font-size:13px;color:var(--muted);flex:1">${d}</div>
+          ${action === "new" ? `<button class="btn sm" onclick="newBankForm()">新建</button>` : ""}
+        </div>`).join("")}
+    </div>
+  </div>
+</div>`);
 
     const inds = [["","全部"],["it","IT"],["medical","医疗"],["finance","金融"],
                   ["education","教育"],["construction","建筑"],["language","语言"],["other","其他"]];
@@ -309,8 +330,13 @@ async function viewBanks() {
        <div class="grid cols">${cards}</div>`);
 
     document.getElementById("new").onclick = newBankForm;
-    document.querySelectorAll(".ind-tab").forEach(b => b.onclick = () => {
-      filter = b.dataset.ind; render(filter);
+    document.querySelectorAll(".ind-tab").forEach(b => b.onclick = async () => {
+      filter = b.dataset.ind;
+      try {
+        const { items: newItems } = await api(filter ? `/banks?size=100&industry=${filter}` : `/banks?size=100`);
+        items.length = 0; items.push(...newItems);
+        render(filter);
+      } catch(e) { toast(e.message, true); }
     });
     document.querySelectorAll(".bank").forEach(c => c.onclick = () => {
       S.bank = c.dataset.id; S.view = "bank"; route();
@@ -402,6 +428,11 @@ async function viewBankDetail() {
             ${q.correct_answer===L2?`<span style="color:var(--correct);margin-left:6px;font-size:12px">✓ 正确答案</span>`:""}
           </div>`).join("")}
         ${q.explanation?`<div class="explain" style="margin-top:8px;font-size:13px">${esc(q.explanation)}</div>`:""}
+        <div style="display:flex;gap:8px;margin-top:12px;padding-top:10px;border-top:1px solid var(--line)">
+          <button class="btn ghost sm" style="font-size:12px" onclick="editQ('${q.id}')">✎ 编辑</button>
+          <button class="btn sm" style="background:var(--wrong);border:none;font-size:12px;margin-left:auto"
+            onclick="deleteQ('${q.id}','${esc(q.content).substring(0,20)}')">删除此题</button>
+        </div>
       </div>
     </div>`).join("") :
     `<div class="empty"><div class="big">✎</div>这个题库还没有题目，用 AI 生成一批</div>`;
@@ -410,6 +441,15 @@ async function viewBankDetail() {
     `<div style="display:flex;gap:10px;margin-bottom:20px;flex-wrap:wrap">
        <button class="btn" id="start" ${b.question_count?"":"disabled"}>开始答题</button>
        <button class="btn ghost" id="back">← 返回题库</button>
+     </div>
+
+     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:16px;margin-top:-8px">
+       ${b.industry ? `<span class="pill">${L("industry", b.industry)}</span>` : ""}
+       <span class="pill ${b.status==="published"?"ok":""}">${L("status", b.status)}</span>
+       ${b.description ? `<span style="font-size:13px;color:var(--muted)">${esc(b.description)}</span>` : ""}
+       <span style="font-size:12px;color:var(--muted);margin-left:auto">
+         创建于 ${new Date(b.created_at).toLocaleDateString("zh-CN")}
+       </span>
      </div>
 
      <div class="card" style="margin-bottom:24px">
@@ -506,6 +546,66 @@ async function viewBankDetail() {
   };
   window.rejectQ = async (id) => {
     try { await api("/questions/" + id + "/reject", { method:"POST" }); toast("已拒绝"); viewBankDetail(); }
+    catch(e) { toast(e.message, true); }
+  };
+  window.deleteQ = async (id, preview) => {
+    if (!confirm(`确定删除题目「${preview}…」？\n此操作不可恢复。`)) return;
+    try { await api("/questions/" + id, { method: "DELETE" }); toast("题目已删除"); viewBankDetail(); }
+    catch(e) { toast(e.message, true); }
+  };
+  window.editQ = (id) => {
+    const det = document.getElementById("qdet_" + id);
+    if (!det) return;
+    det.innerHTML = `
+      <div style="display:flex;flex-direction:column;gap:10px;margin-top:8px">
+        <div><label class="f">题干</label>
+          <textarea class="in" id="eq_content_${id}" rows="3" style="resize:vertical"></textarea></div>
+        ${["A","B","C","D"].map(Lx => `
+          <div><label class="f">选项 ${Lx}</label>
+            <input class="in" id="eq_opt${Lx}_${id}"></div>`).join("")}
+        <div><label class="f">正确答案</label>
+          <select class="in" id="eq_ans_${id}">
+            ${["A","B","C","D"].map(Lx=>`<option value="${Lx}">${Lx}</option>`).join("")}
+          </select></div>
+        <div><label class="f">难度</label>
+          <select class="in" id="eq_diff_${id}">
+            <option value="easy">基础</option>
+            <option value="medium">进阶</option>
+            <option value="hard">综合</option>
+          </select></div>
+        <div><label class="f">解析（可选）</label>
+          <textarea class="in" id="eq_exp_${id}" rows="2" style="resize:vertical"></textarea></div>
+        <div style="display:flex;gap:8px">
+          <button class="btn sm" onclick="saveQ('${id}')">保存</button>
+          <button class="btn ghost sm" onclick="viewBankDetail()">取消</button>
+        </div>
+      </div>`;
+    api("/questions/" + id).then(q => {
+      document.getElementById("eq_content_" + id).value = q.content || "";
+      document.getElementById("eq_optA_" + id).value = q.option_a || "";
+      document.getElementById("eq_optB_" + id).value = q.option_b || "";
+      document.getElementById("eq_optC_" + id).value = q.option_c || "";
+      document.getElementById("eq_optD_" + id).value = q.option_d || "";
+      document.getElementById("eq_ans_" + id).value = q.correct_answer || "A";
+      document.getElementById("eq_diff_" + id).value = q.difficulty || "medium";
+      document.getElementById("eq_exp_" + id).value = q.explanation || "";
+    }).catch(e => toast("加载题目失败：" + e.message, true));
+  };
+  window.saveQ = async (id) => {
+    const body = {
+      content: document.getElementById("eq_content_" + id).value.trim(),
+      option_a: document.getElementById("eq_optA_" + id).value.trim(),
+      option_b: document.getElementById("eq_optB_" + id).value.trim(),
+      option_c: document.getElementById("eq_optC_" + id).value.trim(),
+      option_d: document.getElementById("eq_optD_" + id).value.trim(),
+      correct_answer: document.getElementById("eq_ans_" + id).value,
+      difficulty: document.getElementById("eq_diff_" + id).value,
+      explanation: document.getElementById("eq_exp_" + id).value.trim() || null,
+    };
+    if (!body.content) return toast("题干不能为空", true);
+    if (!body.option_a || !body.option_b || !body.option_c || !body.option_d)
+      return toast("四个选项不能为空", true);
+    try { await api("/questions/" + id, { method: "PUT", body }); toast("题目已保存"); viewBankDetail(); }
     catch(e) { toast(e.message, true); }
   };
 }
@@ -855,7 +955,7 @@ async function quizSummary() {
     <div class="card sheet" style="text-align:center;padding:40px">
       <div class="muted" style="font-size:13px;letter-spacing:1px">正确率</div>
       <div style="font-family:var(--mono);font-size:64px;font-weight:800;letter-spacing:-2px;color:${acc>=60?"var(--correct)":"var(--wrong)"}">${acc}<span style="font-size:28px">%</span></div>
-      <div class="muted" style="margin-bottom:26px">答对 ${fin.correct_count} / ${fin.answered_count} 题</div>
+      <div class="muted" style="margin-bottom:26px">答对 ${fin.correct_count} / ${fin.total_questions} 题（已作答 ${fin.answered_count} 题）</div>
       <div class="row" style="justify-content:center;gap:12px">
         <div style="flex:none"><button class="btn" id="again">返回题库</button></div>
         <div style="flex:none"><button class="btn ghost" id="towrong">查看错题本</button></div>
@@ -888,7 +988,9 @@ async function viewWrong(page = 1, bankId = "") {
       <div style="font-weight:500;margin-bottom:10px">${esc(w.question.content)}</div>
       ${w.question.explanation ? `<div class="explain" style="margin-bottom:10px;font-size:13px">${esc(w.question.explanation)}</div>` : ""}
       <div style="display:flex;gap:8px">
-        ${w.is_mastered ? "" : `<button class="btn ghost sm" data-q="${w.question_id}">标记已掌握</button>`}
+        ${w.is_mastered ? "" : `<button class="btn ghost sm" data-q="${w.question_id}" data-action="master">标记已掌握</button>`}
+        <button class="btn ghost sm" data-q="${w.question_id}" data-action="remove"
+          style="color:var(--wrong);border-color:var(--wrong)">从错题本移除</button>
       </div>
     </div>`).join("") : `<div class="empty"><div class="big">✓</div>错题本是空的，继续保持</div>`;
 
@@ -908,8 +1010,17 @@ async function viewWrong(page = 1, bankId = "") {
 
   document.getElementById("w_bank").onchange = (e) => viewWrong(1, e.target.value);
   root.querySelectorAll("[data-q]").forEach(b => b.onclick = async () => {
-    await api(`/wrong/${b.dataset.q}/master`, { method: "POST" });
-    toast("已标记掌握"); viewWrong(page, bankId);
+    try {
+      if (b.dataset.action === "remove") {
+        if (!confirm("确定从错题本移除？移除后将不再出现在错题练习中。")) return;
+        await api(`/wrong/${b.dataset.q}`, { method: "DELETE" });
+        toast("已从错题本移除");
+      } else {
+        await api(`/wrong/${b.dataset.q}/master`, { method: "POST" });
+        toast("已标记已掌握");
+      }
+      viewWrong(page, bankId);
+    } catch(e) { toast(e.message, true); }
   });
   if (document.getElementById("wp_prev"))
     document.getElementById("wp_prev").onclick = () => viewWrong(page - 1, bankId);
@@ -956,6 +1067,89 @@ async function viewStats() {
     </div>
     <div style="font-weight:700;margin-bottom:12px;font-size:15px">各题库表现</div>
     ${bankRows}`);
+}
+
+/* ---------------- 学习计划 ---------------- */
+async function viewPlan() {
+  const { items: plans } = await api("/study-plans?size=50").catch(() => ({ items: [] }));
+  const { items: banks } = await api("/banks?size=100").catch(() => ({ items: [] }));
+  const bankOpts = banks.map(b => `<option value="${b.id}">${esc(b.title)}</option>`).join("");
+
+  const planCards = plans.length ? plans.map(p => {
+    const bank = banks.find(b => b.id === p.bank_id);
+    const daysLeft = Math.max(0, Math.ceil((new Date(p.target_date) - new Date()) / 86400000));
+    return `
+      <div class="card" style="margin-bottom:10px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+          <span style="font-weight:500;font-size:14px">${esc(bank?.title || "未知题库")}</span>
+          <span class="pill ${p.is_active?"ok":""}">
+            ${p.is_active ? (daysLeft > 0 ? `${daysLeft} 天后到期` : "已到期") : "已停用"}
+          </span>
+        </div>
+        <div style="font-size:13px;color:var(--muted);margin-bottom:10px">
+          目标日期：${p.target_date} · 每日新题：${p.daily_new_questions} 道 · 每日复习：${p.daily_review_questions} 道
+        </div>
+        <div style="display:flex;gap:8px">
+          <button class="btn ghost sm" data-bank="${p.bank_id}" data-action="go">去练习</button>
+          <button class="btn ghost sm" style="color:var(--wrong);border-color:var(--wrong);margin-left:auto"
+            data-plan="${p.id}" data-action="del">删除计划</button>
+        </div>
+      </div>`;
+  }).join("") : `<div class="empty"><div class="big">▷</div>还没有学习计划，创建一个开始有计划地学习</div>`;
+
+  shell("学习计划", `${plans.length} 个计划`,
+    `<div style="margin-bottom:16px"><button class="btn" id="new_plan">＋ 新建学习计划</button></div>
+     ${planCards}`);
+
+  document.getElementById("new_plan").onclick = () => {
+    if (document.getElementById("npf")) return;
+    document.getElementById("body").insertAdjacentHTML("afterbegin", `
+      <div class="card" id="npf" style="margin-bottom:18px">
+        <div style="font-weight:600;margin-bottom:12px">新建学习计划</div>
+        <div class="row">
+          <div style="flex:2"><label class="f">选择题库 *</label>
+            <select class="in" id="np_bank"><option value="">请选择…</option>${bankOpts}</select></div>
+          <div><label class="f">目标完成日期 *</label>
+            <input class="in" id="np_date" type="date" min="${new Date().toISOString().split('T')[0]}"></div>
+        </div>
+        <div class="row" style="margin-top:10px">
+          <div><label class="f">每日新题数</label>
+            <input class="in" id="np_new" type="number" value="10" min="1" max="100"></div>
+          <div><label class="f">每日复习数</label>
+            <input class="in" id="np_rev" type="number" value="5" min="0" max="100"></div>
+        </div>
+        <div class="row" style="margin-top:12px;justify-content:flex-end"><div style="flex:none">
+          <button class="btn sm" id="np_save">创建</button>
+          <button class="btn ghost sm" id="np_cancel" style="margin-left:8px">取消</button>
+        </div></div>
+      </div>`);
+    document.getElementById("np_cancel").onclick = () => document.getElementById("npf").remove();
+    document.getElementById("np_save").onclick = async () => {
+      const bank_id = document.getElementById("np_bank").value;
+      const target_date = document.getElementById("np_date").value;
+      if (!bank_id) return toast("请选择题库", true);
+      if (!target_date) return toast("请选择目标日期", true);
+      try {
+        await api("/study-plans", { body: {
+          bank_id, target_date,
+          daily_new_questions: Number(document.getElementById("np_new").value),
+          daily_review_questions: Number(document.getElementById("np_rev").value),
+        }});
+        toast("学习计划已创建");
+        document.getElementById("npf").remove();
+        viewPlan();
+      } catch(e) { toast(e.message, true); }
+    };
+  };
+
+  root.querySelectorAll("[data-action]").forEach(b => b.onclick = async () => {
+    if (b.dataset.action === "go") { S.bank = b.dataset.bank; S.view = "bank"; route(); return; }
+    if (b.dataset.action === "del") {
+      if (!confirm("确定删除这个学习计划？")) return;
+      try { await api("/study-plans/" + b.dataset.plan, { method: "DELETE" }); toast("计划已删除"); viewPlan(); }
+      catch(e) { toast(e.message, true); }
+    }
+  });
 }
 
 /* ---------------- boot ---------------- */

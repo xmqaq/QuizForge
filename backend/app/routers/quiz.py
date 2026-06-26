@@ -133,6 +133,22 @@ async def submit_answer(
     if q is None:
         raise HTTPException(status_code=404, detail="题目不存在")
 
+    existing = await db.scalar(
+        select(QuizAnswer).where(
+            QuizAnswer.session_id == s.id,
+            QuizAnswer.question_id == data.question_id,
+        )
+    )
+    if existing is not None:
+        # 已作答过，直接返回原结果，避免重复计分
+        return AnswerResult(
+            is_correct=existing.is_correct,
+            correct_answer=q.correct_answer,
+            explanation=q.explanation,
+            answered_count=s.answered_count,
+            correct_count=s.correct_count,
+        )
+
     is_correct = data.user_answer == q.correct_answer
     db.add(
         QuizAnswer(

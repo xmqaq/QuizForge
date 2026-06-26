@@ -66,5 +66,5 @@ class Question(Base):
 
     bank = relationship("QuestionBank", back_populates="questions")
     creator = relationship("User")
-    answers = relationship("QuizAnswer", back_populates="question")
-    wrong_records = relationship("WrongQuestion", back_populates="question")
+    answers = relationship("QuizAnswer", back_populates="question", cascade="all, delete-orphan")
+    wrong_records = relationship("WrongQuestion", back_populates="question", cascade="all, delete-orphan")

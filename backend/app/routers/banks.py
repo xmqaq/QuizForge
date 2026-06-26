@@ -36,12 +36,15 @@ async def list_banks(
     size: int = Query(20, ge=1, le=100),
     category_id: int | None = None,
     status: BankStatus | None = None,
+    industry: str | None = None,
 ):
     stmt = select(QuestionBank)
     if category_id is not None:
         stmt = stmt.where(QuestionBank.category_id == category_id)
     if status is not None:
         stmt = stmt.where(QuestionBank.status == status)
+    if industry is not None:
+        stmt = stmt.where(QuestionBank.industry == industry)
 
     total = await db.scalar(select(func.count()).select_from(stmt.subquery()))
     rows = await db.scalars(

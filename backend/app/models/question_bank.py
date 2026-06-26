@@ -43,4 +43,5 @@ class QuestionBank(Base):
     category = relationship("Category", back_populates="banks")
     creator = relationship("User", back_populates="banks")
     questions = relationship("Question", back_populates="bank", cascade="all, delete-orphan")
-    sessions = relationship("QuizSession", back_populates="bank")
+    sessions = relationship("QuizSession", back_populates="bank", cascade="all, delete-orphan")
+    study_plans = relationship("StudyPlan", back_populates="bank", cascade="all, delete-orphan")

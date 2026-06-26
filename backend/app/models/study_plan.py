@@ -20,4 +20,4 @@ class StudyPlan(Base):
     created_at = Column(DateTime, default=func.now(), nullable=False)
 
     user = relationship("User", back_populates="study_plans")
-    bank = relationship("QuestionBank")
+    bank = relationship("QuestionBank", back_populates="study_plans")
