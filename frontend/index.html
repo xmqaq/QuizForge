@@ -52,11 +52,15 @@
   .nav:hover { background: rgba(255,255,255,.06); color: #fff; }
   .nav.on { background: var(--accent); color: #fff; }
   .rail .spacer { flex: 1; }
-  .who { font-size: 13px; color: #9398A4; padding: 12px 8px 4px; border-top: 1px solid rgba(255,255,255,.08); }
-  .who b { color: #fff; }
-  .signout { margin-top: 8px; font-size: 12px; color: #9398A4; background: none; border: 1px solid rgba(255,255,255,.12);
-    padding: 7px 10px; border-radius: 8px; }
-  .signout:hover { color: #fff; border-color: rgba(255,255,255,.3); }
+  .userbar { display: flex; align-items: center; gap: 10px; padding: 12px 8px; border-top: 1px solid rgba(255,255,255,.08); }
+  .avatar { width: 32px; height: 32px; border-radius: 50%; background: var(--accent); display: grid;
+    place-items: center; font-size: 13px; font-weight: 700; color: #fff; flex: none; }
+  .userinfo { flex: 1; min-width: 0; }
+  .userinfo .uname { font-size: 13px; font-weight: 600; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .userinfo .urole { font-size: 11px; color: #7E8390; margin-top: 1px; }
+  .signout { flex: none; background: none; border: 1px solid rgba(255,255,255,.15); color: #9398A4;
+    padding: 5px 8px; border-radius: 7px; font-size: 12px; cursor: pointer; }
+  .signout:hover { color: #fff; border-color: rgba(255,255,255,.4); }
 
   .main { padding: 34px 40px 60px; max-width: 980px; }
   .head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 22px; }
@@ -153,7 +157,7 @@
   @media (max-width: 760px) {
     .app { grid-template-columns: 1fr; }
     .rail { position: static; height: auto; flex-direction: row; flex-wrap: wrap; align-items: center; }
-    .rail .brand { padding: 4px 8px; } .rail .spacer, .who { display: none; }
+    .rail .brand { padding: 4px 8px; } .rail .spacer, .userbar { display: none; }
     .nav { width: auto; }
     .main { padding: 22px 18px 50px; }
   }
@@ -197,6 +201,8 @@
     .quiz-panel { position: static; }
     .omr-grid { grid-template-columns: repeat(8, 1fr); }
   }
+  .del-bank { opacity: 0; transition: opacity .15s; }
+  .bank:hover .del-bank { opacity: 1; }
 </style>
 </head>
 <body>
@@ -239,15 +245,21 @@ const LABEL = {
 const L = (type, val) => LABEL[type]?.[val] || val;
 
 /* ---------------- auth ---------------- */
-function renderAuth() {
+async function renderAuth() {
   let tab = "login";
+  let allowReg = true;
+  try {
+    const pc = await api("/admin/public-config");
+    allowReg = pc.allow_register !== false;
+  } catch { /* 拿不到配置就按允许注册处理 */ }
+  if (!allowReg) tab = "login";
   const draw = () => {
     root.innerHTML = `
     <div class="auth"><div class="card authcard">
       <div class="brand"><div class="mark">Q</div><div><b>QuizForge</b><span>智能题库系统</span></div></div>
       <div class="tabs">
         <button id="t-login" class="${tab==="login"?"on":""}">登录</button>
-        <button id="t-reg" class="${tab==="reg"?"on":""}">注册</button>
+        ${allowReg ? `<button id="t-reg" class="${tab==="reg"?"on":""}">注册</button>` : ""}
       </div>
       <form id="af">
         ${tab==="reg" ? `<div class="fld"><label class="f">用户名</label><input class="in" id="username" required minlength="2"></div>` : ""}
@@ -257,7 +269,8 @@ function renderAuth() {
       </form>
     </div></div>`;
     document.getElementById("t-login").onclick = () => { tab = "login"; draw(); };
-    document.getElementById("t-reg").onclick = () => { tab = "reg"; draw(); };
+    const tReg = document.getElementById("t-reg");
+    if (tReg) tReg.onclick = () => { tab = "reg"; draw(); };
     document.getElementById("af").onsubmit = async (e) => {
       e.preventDefault();
       const email = document.getElementById("email").value;
@@ -281,17 +294,30 @@ function renderAuth() {
 
 /* ---------------- app shell ---------------- */
 const NAV = [
-  ["banks", "题库", "▦"], ["wrong", "错题本", "✕"], ["stats", "统计", "▤"], ["plan", "学习计划", "▷"],
+  ["banks",   "题库",   "▦", null],
+  ["wrong",   "错题本", "✕", null],
+  ["stats",   "统计",   "▤", null],
+  ["plan",    "学习计划","▷", null],
+  ["admin_users",  "用户管理", "👥", "admin"],
+  ["admin_config", "系统设置", "⚙", "admin"],
 ];
 function shell(title, sub, inner) {
   root.innerHTML = `
   <div class="app">
     <aside class="rail">
       <div class="brand"><div class="mark">Q</div><div><b>QuizForge</b><span>智能题库系统</span></div></div>
-      ${NAV.map(([v,l,ic]) => `<button class="nav ${S.view===v?"on":""}" data-v="${v}"><span class="ic">${ic}</span>${l}</button>`).join("")}
+      ${NAV.filter(([v,l,ic,role]) => !role || S.user?.role === role)
+        .map(([v,l,ic]) => `<button class="nav ${S.view===v?"on":""}" data-v="${v}"><span class="ic">${ic}</span>${l}</button>`)
+        .join("")}
       <div class="spacer"></div>
-      <div class="who">登录为 <b>${esc(S.user?.username)}</b><br><span style="font-family:var(--mono);font-size:11px">${esc(S.user?.role)}</span></div>
-      <button class="signout" id="out">退出登录</button>
+      <div class="userbar">
+        <div class="avatar">${(S.user?.username||"?")[0].toUpperCase()}</div>
+        <div class="userinfo">
+          <div class="uname">${esc(S.user?.username)}</div>
+          <div class="urole">${({admin:"管理员",editor:"编辑",user:"用户"})[S.user?.role]||S.user?.role}</div>
+        </div>
+        <button class="signout" id="out" title="退出登录">↪</button>
+      </div>
     </aside>
     <main class="main">
       <div class="head"><h1>${title}</h1><div class="sub">${sub||""}</div></div>
@@ -311,6 +337,8 @@ async function route() {
     if (S.view === "wrong") return await viewWrong();
     if (S.view === "stats") return await viewStats();
     if (S.view === "plan") return await viewPlan();
+    if (S.view === "admin_users") return await viewAdminUsers();
+    if (S.view === "admin_config") return await viewAdminConfig();
   } catch (e) { toast(e.message, true); }
 }
 
@@ -366,6 +394,9 @@ async function viewBanks() {
          ${inds.map(([v,l])=>`<button class="btn ghost sm ind-tab${filter===v?" on":""}" data-ind="${v}"
            style="${filter===v?"background:var(--accent);color:#fff;border-color:var(--accent)":""}">${l}</button>`).join("")}
        </div>
+       <div style="margin-bottom:14px">
+         <input class="in" id="bank_search" placeholder="搜索题库名称…" style="max-width:280px">
+       </div>
        <div class="grid cols">${cards}</div>`);
 
     document.getElementById("new").onclick = newBankForm;
@@ -377,6 +408,13 @@ async function viewBanks() {
         render(filter);
       } catch(e) { toast(e.message, true); }
     });
+    document.getElementById("bank_search").oninput = (e) => {
+      const kw = e.target.value.trim().toLowerCase();
+      document.querySelectorAll(".bank").forEach(card => {
+        const title = card.querySelector("h3")?.textContent.toLowerCase() || "";
+        card.style.display = (!kw || title.includes(kw)) ? "" : "none";
+      });
+    };
     document.querySelectorAll(".bank").forEach(c => c.onclick = () => {
       S.bank = c.dataset.id; S.view = "bank"; route();
     });
@@ -480,6 +518,7 @@ async function viewBankDetail() {
     `<div style="display:flex;gap:10px;margin-bottom:20px;flex-wrap:wrap">
        <button class="btn" id="start" ${b.question_count?"":"disabled"}>开始答题</button>
        <button class="btn ghost" id="back">← 返回题库</button>
+       <button class="btn ghost" id="add_manual">＋ 手动添加题目</button>
      </div>
 
      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:16px;margin-top:-8px">
@@ -566,6 +605,56 @@ async function viewBankDetail() {
      <div id="qlist_wrap">${qlist}</div>`);
 
   document.getElementById("back").onclick = () => go("banks");
+  document.getElementById("add_manual").onclick = () => {
+    const body = document.getElementById("body");
+    if (document.getElementById("manual_form")) return;
+    body.insertAdjacentHTML("afterbegin", `
+      <div class="card" id="manual_form" style="margin-bottom:18px">
+        <div style="font-weight:600;margin-bottom:14px">手动添加题目</div>
+        <div class="fld"><label class="f">题干 *</label><textarea class="in" id="mq_content" rows="3" style="resize:vertical"></textarea></div>
+        <div class="row">
+          <div class="fld"><label class="f">选项 A *</label><input class="in" id="mq_a"></div>
+          <div class="fld"><label class="f">选项 B *</label><input class="in" id="mq_b"></div>
+        </div>
+        <div class="row">
+          <div class="fld"><label class="f">选项 C *</label><input class="in" id="mq_c"></div>
+          <div class="fld"><label class="f">选项 D *</label><input class="in" id="mq_d"></div>
+        </div>
+        <div class="row">
+          <div><label class="f">正确答案 *</label>
+            <select class="in" id="mq_ans"><option>A</option><option>B</option><option>C</option><option>D</option></select></div>
+          <div><label class="f">难度</label>
+            <select class="in" id="mq_diff"><option value="easy">基础</option><option value="medium" selected>进阶</option><option value="hard">综合</option></select></div>
+        </div>
+        <div class="fld"><label class="f">解析（可选）</label><textarea class="in" id="mq_exp" rows="2" style="resize:vertical"></textarea></div>
+        <div style="display:flex;gap:8px;margin-top:4px">
+          <button class="btn sm" id="mq_save">添加题目</button>
+          <button class="btn ghost sm" id="mq_cancel">取消</button>
+        </div>
+      </div>`);
+    document.getElementById("mq_cancel").onclick = () => document.getElementById("manual_form").remove();
+    document.getElementById("mq_save").onclick = async () => {
+      const content = document.getElementById("mq_content").value.trim();
+      const a = document.getElementById("mq_a").value.trim();
+      const b2 = document.getElementById("mq_b").value.trim();
+      const c = document.getElementById("mq_c").value.trim();
+      const d = document.getElementById("mq_d").value.trim();
+      if (!content || !a || !b2 || !c || !d) return toast("题干和四个选项不能为空", true);
+      try {
+        await api("/questions", { body: {
+          bank_id: S.bank, content,
+          option_a: a, option_b: b2, option_c: c, option_d: d,
+          correct_answer: document.getElementById("mq_ans").value,
+          difficulty: document.getElementById("mq_diff").value,
+          explanation: document.getElementById("mq_exp").value.trim() || null,
+          status: "approved",
+        }});
+        toast("题目已添加");
+        document.getElementById("manual_form").remove();
+        viewBankDetail();
+      } catch(e) { toast(e.message, true); }
+    };
+  };
   document.getElementById("start").onclick = () => openQuizConfig(b.title);
   document.getElementById("ai_go").onclick = runAI;
   document.getElementById("ai_file_go").onclick = runAIFile;
@@ -1296,6 +1385,35 @@ async function viewStats() {
     </div>
     <div style="font-weight:700;margin-bottom:12px;font-size:15px">各题库表现</div>
     ${bankRows}`);
+
+  try {
+    const { items: sessions } = await api("/quiz/sessions?size=10");
+    const { items: banks } = await api("/banks?size=100").catch(() => ({ items: [] }));
+    const bankMap = Object.fromEntries(banks.map(b => [b.id, b.title]));
+    const histWrap = document.createElement("div");
+    histWrap.innerHTML = `
+      <div style="font-weight:600;font-size:15px;margin:24px 0 12px">近期答题记录</div>
+      <div class="card" style="padding:0;overflow:hidden">
+        <table style="width:100%;border-collapse:collapse">
+          <thead><tr style="background:var(--paper);border-bottom:1px solid var(--line)">
+            <th style="padding:8px 12px;text-align:left;font-size:12px;color:var(--muted);font-weight:600">题库</th>
+            <th style="padding:8px 12px;text-align:left;font-size:12px;color:var(--muted);font-weight:600">模式</th>
+            <th style="padding:8px 12px;text-align:left;font-size:12px;color:var(--muted);font-weight:600">得分</th>
+            <th style="padding:8px 12px;text-align:left;font-size:12px;color:var(--muted);font-weight:600">时间</th>
+          </tr></thead>
+          <tbody>${sessions.map(s => {
+            const acc = s.total_questions ? Math.round(s.correct_count / s.total_questions * 100) : 0;
+            return `<tr style="border-bottom:1px solid var(--line)">
+              <td style="padding:8px 12px;font-size:13px">${esc(bankMap[s.bank_id] || "未知题库")}</td>
+              <td style="padding:8px 12px"><span class="pill">${L("mode",s.mode)}</span></td>
+              <td style="padding:8px 12px"><span style="font-family:var(--mono);font-weight:700;color:${acc>=60?"var(--correct)":"var(--wrong)"}">${acc}%</span> <span style="font-size:12px;color:var(--muted)">${s.correct_count}/${s.total_questions}</span></td>
+              <td style="padding:8px 12px;font-size:12px;color:var(--muted)">${new Date(s.started_at).toLocaleDateString("zh-CN")}</td>
+            </tr>`;
+          }).join("")}</tbody>
+        </table>
+      </div>`;
+    document.querySelector(".main")?.appendChild(histWrap);
+  } catch {}
 }
 
 /* ---------------- 学习计划 ---------------- */
@@ -1379,6 +1497,148 @@ async function viewPlan() {
       catch(e) { toast(e.message, true); }
     }
   });
+}
+
+/* ---------------- 用户管理（admin） ---------------- */
+async function viewAdminUsers() {
+  if (S.user?.role !== "admin") return toast("无权访问", true);
+  const users = await api("/users");
+
+  const rows = users.map(u => `
+    <tr data-uid="${u.id}">
+      <td style="padding:10px 12px">
+        <div style="font-weight:500">${esc(u.username)}</div>
+        <div style="font-size:12px;color:var(--muted)">${esc(u.email)}</div>
+      </td>
+      <td style="padding:10px 12px">
+        <select class="in role-sel" data-uid="${u.id}" style="padding:5px 8px;font-size:12px;width:80px"
+          ${u.id === S.user.id ? "disabled" : ""}>
+          <option value="user"    ${u.role==="user"   ?"selected":""}>用户</option>
+          <option value="editor"  ${u.role==="editor" ?"selected":""}>编辑</option>
+          <option value="admin"   ${u.role==="admin"  ?"selected":""}>管理员</option>
+        </select>
+      </td>
+      <td style="padding:10px 12px">
+        <span class="pill ${u.is_active?"ok":"warn"}">${u.is_active?"正常":"已停用"}</span>
+      </td>
+      <td style="padding:10px 12px;font-size:12px;color:var(--muted)">${new Date(u.created_at).toLocaleDateString("zh-CN")}</td>
+      <td style="padding:10px 12px">
+        ${u.id !== S.user.id ? `
+          <button class="btn ghost sm toggle-active" data-uid="${u.id}" data-active="${u.is_active}" style="font-size:12px">
+            ${u.is_active ? "停用" : "启用"}
+          </button>` : "<span style='font-size:12px;color:var(--muted)'>（本人）</span>"}
+      </td>
+    </tr>`).join("");
+
+  shell("用户管理", `${users.length} 个用户`,
+    `<div class="card" style="padding:0;overflow:hidden">
+       <table style="width:100%;border-collapse:collapse">
+         <thead>
+           <tr style="background:var(--paper);border-bottom:1px solid var(--line)">
+             <th style="padding:10px 12px;text-align:left;font-size:12px;color:var(--muted);font-weight:600">用户</th>
+             <th style="padding:10px 12px;text-align:left;font-size:12px;color:var(--muted);font-weight:600">角色</th>
+             <th style="padding:10px 12px;text-align:left;font-size:12px;color:var(--muted);font-weight:600">状态</th>
+             <th style="padding:10px 12px;text-align:left;font-size:12px;color:var(--muted);font-weight:600">注册时间</th>
+             <th style="padding:10px 12px;text-align:left;font-size:12px;color:var(--muted);font-weight:600">操作</th>
+           </tr>
+         </thead>
+         <tbody style="border-top:1px solid var(--line)">${rows}</tbody>
+       </table>
+     </div>`);
+
+  root.querySelectorAll(".role-sel").forEach(sel => {
+    sel.onchange = async () => {
+      try {
+        await api("/users/" + sel.dataset.uid, { method: "PUT", body: { role: sel.value } });
+        toast("角色已更新");
+        sel.dataset.orig = sel.value;
+      } catch(e) { toast(e.message, true); sel.value = sel.dataset.orig; }
+    };
+    sel.dataset.orig = sel.value;
+  });
+
+  root.querySelectorAll(".toggle-active").forEach(btn => {
+    btn.onclick = async () => {
+      const active = btn.dataset.active === "true";
+      if (!confirm(`确定${active?"停用":"启用"}该用户？`)) return;
+      try {
+        await api("/users/" + btn.dataset.uid, { method: active ? "DELETE" : "PUT", body: active ? undefined : { is_active: true } });
+        toast(active ? "用户已停用" : "用户已启用");
+        viewAdminUsers();
+      } catch(e) { toast(e.message, true); }
+    };
+  });
+}
+
+/* ---------------- 系统设置（admin） ---------------- */
+async function viewAdminConfig() {
+  if (S.user?.role !== "admin") return toast("无权访问", true);
+  const cfg = await api("/admin/config");
+
+  shell("系统设置", "ADMIN",
+    `<div style="max-width:560px">
+       <div class="card" style="margin-bottom:16px">
+         <div style="font-weight:600;font-size:15px;margin-bottom:16px">DeepSeek API 配置</div>
+         <div class="fld">
+           <label class="f">API Key</label>
+           <div style="display:flex;gap:8px">
+             <input class="in" id="cfg_key" type="password" placeholder="输入新的 API Key（留空不修改）" style="flex:1">
+             <button class="btn ghost sm" id="cfg_key_toggle" style="flex:none;white-space:nowrap">显示</button>
+           </div>
+           <div style="font-size:12px;color:var(--muted);margin-top:4px">当前：${esc(cfg.deepseek_api_key_masked || "未配置")}</div>
+         </div>
+         <div class="fld">
+           <label class="f">Base URL</label>
+           <input class="in" id="cfg_url" value="${esc(cfg.deepseek_base_url)}">
+         </div>
+         <div class="fld">
+           <label class="f">模型名称</label>
+           <input class="in" id="cfg_model" value="${esc(cfg.deepseek_model)}">
+           <div style="font-size:12px;color:var(--muted);margin-top:4px">如：deepseek-chat、deepseek-coder</div>
+         </div>
+       </div>
+
+       <div class="card" style="margin-bottom:16px">
+         <div style="font-weight:600;font-size:15px;margin-bottom:16px">站点设置</div>
+         <div class="fld">
+           <label class="f">站点名称</label>
+           <input class="in" id="cfg_name" value="${esc(cfg.site_name)}">
+         </div>
+         <div class="fld" style="display:flex;align-items:center;gap:10px">
+           <input type="checkbox" id="cfg_reg" ${cfg.allow_register?"checked":""} style="width:16px;height:16px">
+           <label for="cfg_reg" style="font-size:14px">允许新用户注册</label>
+         </div>
+       </div>
+
+       <button class="btn" id="cfg_save" style="width:100%">保存配置</button>
+     </div>`);
+
+  document.getElementById("cfg_key_toggle").onclick = () => {
+    const inp = document.getElementById("cfg_key");
+    const isPass = inp.type === "password";
+    inp.type = isPass ? "text" : "password";
+    document.getElementById("cfg_key_toggle").textContent = isPass ? "隐藏" : "显示";
+  };
+
+  document.getElementById("cfg_save").onclick = async () => {
+    const btn = document.getElementById("cfg_save");
+    btn.disabled = true; btn.textContent = "保存中…";
+    const body = {};
+    const key = document.getElementById("cfg_key").value.trim();
+    if (key) body.deepseek_api_key = key;
+    const url = document.getElementById("cfg_url").value.trim();
+    if (url) body.deepseek_base_url = url;
+    const model = document.getElementById("cfg_model").value.trim();
+    if (model) body.deepseek_model = model;
+    body.site_name = document.getElementById("cfg_name").value.trim();
+    body.allow_register = document.getElementById("cfg_reg").checked;
+    try {
+      await api("/admin/config", { method: "PUT", body });
+      toast("配置已保存，即时生效");
+      document.getElementById("cfg_key").value = "";
+    } catch(e) { toast(e.message, true); }
+    finally { btn.disabled = false; btn.textContent = "保存配置"; }
+  };
 }
 
 /* ---------------- boot ---------------- */

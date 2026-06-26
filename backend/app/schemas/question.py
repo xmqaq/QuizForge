@@ -22,6 +22,7 @@ class QuestionCreate(BaseModel):
     explanation: str | None = None
     difficulty: Difficulty = Difficulty.medium
     source: QuestionSource = QuestionSource.manual
+    status: QuestionStatus = QuestionStatus.pending_review
     tags: list[str] = Field(default_factory=list)
 
 
