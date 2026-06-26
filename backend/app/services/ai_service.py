@@ -5,15 +5,15 @@ from openai import AsyncOpenAI
 from app.config import settings
 
 client = AsyncOpenAI(api_key=settings.DEEPSEEK_API_KEY, base_url=settings.DEEPSEEK_BASE_URL)
-current_model = settings.DEEPSEEK_MODEL
+_active_model = settings.DEEPSEEK_MODEL
 
 
-def reload_client(api_key: str, base_url: str, model: str | None = None):
-    """运行时切换 DeepSeek 凭证 / 模型（管理员在系统设置里改了配置后调用）。"""
-    global client, current_model
+def reload_client(api_key: str, base_url: str, model: str = ""):
+    """运行时切换 AI 凭证 / 模型（管理员在系统设置里改了配置后调用）。"""
+    global client, _active_model
     client = AsyncOpenAI(api_key=api_key, base_url=base_url)
     if model:
-        current_model = model
+        _active_model = model
 
 PROMPT_TEMPLATE = """你是一个专业的题库出题专家，请根据以下要求生成选择题。
 
@@ -80,7 +80,7 @@ async def generate_questions(
     last_err: Exception | None = None
     for _ in range(2):  # ponytail: one retry is enough; LLM JSON failures are usually transient
         resp = await client.chat.completions.create(
-            model=current_model,
+            model=_active_model,
             messages=[{"role": "user", "content": prompt}],
             response_format={"type": "json_object"},
             temperature=0.7,
@@ -108,7 +108,7 @@ async def suggest_topics(bank_title: str) -> list[str]:
     last_err: Exception | None = None
     for _ in range(2):
         resp = await client.chat.completions.create(
-            model=current_model,
+            model=_active_model,
             messages=[{"role": "user", "content": prompt}],
             response_format={"type": "json_object"},
             temperature=0.8,

@@ -21,10 +21,10 @@ async def register_user(db: AsyncSession, data: UserCreate) -> User:
 
     # 管理员可在系统设置里关闭注册；首个用户（初始管理员）始终放行
     if not first_user:
-        from app.routers.admin import get_config
+        from app.routers.admin import get_site_config
 
         try:
-            allow_register = get_config().get("allow_register", True)
+            allow_register = get_site_config().get("allow_register", True)
         except Exception:
             allow_register = True  # redis 不可用时放行，避免把注册彻底锁死
         if not allow_register:

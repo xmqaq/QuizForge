@@ -13,6 +13,16 @@ from app.models.question_bank import QuestionBank
 from app.services import ai_service, file_service
 from celery_worker import celery
 
+
+def _sync_ai_client() -> None:
+    """worker 进程不经过 API 启动钩子，出题前先从 Redis 拉取当前激活的模型商配置。"""
+    try:
+        from app.routers.admin import _reload_ai_client
+
+        _reload_ai_client()
+    except Exception:  # ponytail: 拉不到配置就退回 .env 默认值，别让出题任务崩
+        pass
+
 _redis = redis.Redis.from_url(settings.REDIS_URL, decode_responses=True)
 TASK_TTL = 86400
 
@@ -55,7 +65,7 @@ async def _persist_questions(
                     difficulty=Difficulty(difficulty),
                     source=QuestionSource.ai_generated,
                     status=status,
-                    ai_model=settings.DEEPSEEK_MODEL,
+                    ai_model=ai_service._active_model,
                     created_by=uuid.UUID(user_id) if user_id else None,
                 )
                 db.add(q)
@@ -85,6 +95,7 @@ async def _run_generate(task_id, bank_id, topic, difficulty, count, auto_approve
         total=count,
         questions=[],
     )
+    _sync_ai_client()
     items = await ai_service.generate_questions(topic, difficulty, count)
 
     # 阶段二：入库中（用实际返回数量，可能和 count 不等）
@@ -143,6 +154,7 @@ async def _run_from_file(
     _set_state(task_id, stage="ai_thinking", progress=20)
 
     topic = "基于上传文档的知识点"
+    _sync_ai_client()
     items = await ai_service.generate_questions(topic, difficulty, count, extra_context=text)
 
     # 阶段二：入库中

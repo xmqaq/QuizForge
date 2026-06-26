@@ -32,7 +32,7 @@
   a { color: var(--accent); }
 
   /* ---------- shell ---------- */
-  .app { display: grid; grid-template-columns: 232px 1fr; min-height: 100vh; }
+  .app { display: grid; grid-template-columns: 220px 1fr; min-height: 100vh; }
   .rail {
     background: var(--ink); color: #C7CAD1; padding: 22px 16px;
     display: flex; flex-direction: column; gap: 4px; position: sticky; top: 0; height: 100vh;
@@ -51,6 +51,9 @@
   .nav .ic { width: 18px; text-align: center; opacity: .85; }
   .nav:hover { background: rgba(255,255,255,.06); color: #fff; }
   .nav.on { background: var(--accent); color: #fff; }
+  .nav-section { font-size: 10px; font-weight: 700; color: #4A4E5A; letter-spacing: .8px;
+    text-transform: uppercase; padding: 16px 12px 6px; }
+  .nav-divider { height: 1px; background: rgba(255,255,255,.06); margin: 8px 0; }
   .rail .spacer { flex: 1; }
   .userbar { display: flex; align-items: center; gap: 10px; padding: 12px 8px; border-top: 1px solid rgba(255,255,255,.08); }
   .avatar { width: 32px; height: 32px; border-radius: 50%; background: var(--accent); display: grid;
@@ -62,9 +65,9 @@
     padding: 5px 8px; border-radius: 7px; font-size: 12px; cursor: pointer; }
   .signout:hover { color: #fff; border-color: rgba(255,255,255,.4); }
 
-  .main { padding: 34px 40px 60px; max-width: 980px; }
+  .main { padding: 32px 44px 80px; max-width: 1120px; }
   .head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 22px; }
-  .head h1 { font-size: 25px; margin: 0; letter-spacing: -.4px; }
+  .head h1 { font-size: 22px; margin: 0; letter-spacing: -.3px; font-weight: 600; }
   .head .sub { color: var(--muted); font-size: 13px; font-family: var(--mono); }
 
   /* ---------- pieces ---------- */
@@ -101,8 +104,13 @@
   .toast.err { background: var(--wrong); }
 
   /* ---------- bank card ---------- */
-  .bank { cursor: pointer; transition: transform .12s, box-shadow .12s; }
+  .bank { cursor: pointer; transition: transform .12s, box-shadow .12s; display: flex; flex-direction: column; }
   .bank:hover { transform: translateY(-2px); box-shadow: 0 10px 28px rgba(26,28,34,.08); border-color: #cfd3da; }
+  .bank-industry { display: inline-flex; align-items: center; gap: 4px; font-size: 11px;
+    padding: 2px 8px; border-radius: 5px; font-weight: 500; margin-bottom: 10px; }
+  .bank-count-big { font-family: var(--mono); font-size: 28px; font-weight: 800;
+    letter-spacing: -1px; color: var(--ink); line-height: 1; }
+  .bank-count-big small { font-size: 13px; font-weight: 400; color: var(--muted); margin-left: 4px; }
   .bank h3 { margin: 0 0 6px; font-size: 16px; }
   .bank .desc { font-size: 13px; color: var(--muted); min-height: 20px; margin-bottom: 14px; }
   .bank .meta { display: flex; align-items: center; gap: 8px; }
@@ -203,6 +211,51 @@
   }
   .del-bank { opacity: 0; transition: opacity .15s; }
   .bank:hover .del-bank { opacity: 1; }
+
+  /* ---------- 系统设置 ---------- */
+  .settings-layout { display: grid; grid-template-columns: 200px 1fr; gap: 24px; align-items: start; }
+  .settings-nav { background: var(--card); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+  .settings-nav-item { display: flex; align-items: center; gap: 10px; padding: 11px 16px;
+    font-size: 14px; font-weight: 500; color: var(--muted); cursor: pointer; border: none;
+    background: none; width: 100%; text-align: left; border-bottom: 1px solid var(--line); }
+  .settings-nav-item:last-child { border-bottom: none; }
+  .settings-nav-item:hover { background: var(--paper); color: var(--ink); }
+  .settings-nav-item.on { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+  .settings-nav-item .sic { font-size: 16px; width: 20px; text-align: center; }
+  .settings-content { min-height: 400px; }
+  .section-card { background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+    padding: 20px 24px; margin-bottom: 16px; }
+  .section-card h3 { font-size: 14px; font-weight: 600; margin: 0 0 16px; color: var(--ink); }
+
+  /* ---------- 模型商卡片 ---------- */
+  .provider-card { background: var(--card); border: 1.5px solid var(--line); border-radius: 12px;
+    padding: 16px 18px; margin-bottom: 10px; transition: border-color .15s; }
+  .provider-card.active-provider { border-color: var(--accent); background: var(--accent-soft); }
+  .provider-card.has-key { border-color: var(--correct); }
+  .provider-header { display: flex; align-items: center; gap: 12px; margin-bottom: 0; }
+  .provider-logo { width: 36px; height: 36px; border-radius: 9px; background: var(--paper);
+    display: grid; place-items: center; font-size: 18px; flex: none; border: 1px solid var(--line); }
+  .provider-info { flex: 1; min-width: 0; }
+  .provider-name { font-size: 14px; font-weight: 600; color: var(--ink); }
+  .provider-status { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .provider-actions { display: flex; gap: 6px; flex: none; }
+  .provider-body { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line);
+    display: none; flex-direction: column; gap: 10px; }
+  .provider-body.open { display: flex; }
+  .tag-verified { display: inline-flex; align-items: center; gap: 4px; font-size: 11px;
+    padding: 2px 8px; border-radius: 99px; background: var(--correct-soft); color: var(--correct);
+    border: 1px solid transparent; font-weight: 500; }
+  .tag-unset { display: inline-flex; align-items: center; gap: 4px; font-size: 11px;
+    padding: 2px 8px; border-radius: 99px; background: var(--paper); color: var(--muted);
+    border: 1px solid var(--line); }
+
+  /* ---------- 用户管理表格 ---------- */
+  .admin-table { width: 100%; border-collapse: collapse; }
+  .admin-table th { padding: 10px 14px; text-align: left; font-size: 12px; font-weight: 600;
+    color: var(--muted); background: var(--paper); border-bottom: 1px solid var(--line); }
+  .admin-table td { padding: 11px 14px; font-size: 13px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+  .admin-table tr:last-child td { border-bottom: none; }
+  .admin-table tr:hover td { background: #FAFBFC; }
 </style>
 </head>
 <body>
@@ -294,21 +347,21 @@ async function renderAuth() {
 
 /* ---------------- app shell ---------------- */
 const NAV = [
-  ["banks",   "题库",   "▦", null],
-  ["wrong",   "错题本", "✕", null],
-  ["stats",   "统计",   "▤", null],
-  ["plan",    "学习计划","▷", null],
-  ["admin_users",  "用户管理", "👥", "admin"],
-  ["admin_config", "系统设置", "⚙", "admin"],
+  { v:"banks",        l:"题库",     ic:"▦", role:null },
+  { v:"wrong",        l:"错题本",   ic:"✕", role:null },
+  { v:"stats",        l:"统计",     ic:"▤", role:null },
+  { v:"plan",         l:"学习计划", ic:"▷", role:null },
+  { v:"admin",        l:"系统设置", ic:"⚙", role:"admin" },
 ];
 function shell(title, sub, inner) {
   root.innerHTML = `
   <div class="app">
     <aside class="rail">
       <div class="brand"><div class="mark">Q</div><div><b>QuizForge</b><span>智能题库系统</span></div></div>
-      ${NAV.filter(([v,l,ic,role]) => !role || S.user?.role === role)
-        .map(([v,l,ic]) => `<button class="nav ${S.view===v?"on":""}" data-v="${v}"><span class="ic">${ic}</span>${l}</button>`)
-        .join("")}
+      ${NAV.filter(n => !n.role || S.user?.role === n.role)
+        .map(n => `<button class="nav ${S.view===n.v||S.view.startsWith('admin')&&n.v==='admin'?"on":""}" data-v="${n.v}">
+          <span class="ic">${n.ic}</span>${n.l}
+        </button>`).join("")}
       <div class="spacer"></div>
       <div class="userbar">
         <div class="avatar">${(S.user?.username||"?")[0].toUpperCase()}</div>
@@ -337,8 +390,7 @@ async function route() {
     if (S.view === "wrong") return await viewWrong();
     if (S.view === "stats") return await viewStats();
     if (S.view === "plan") return await viewPlan();
-    if (S.view === "admin_users") return await viewAdminUsers();
-    if (S.view === "admin_config") return await viewAdminConfig();
+    if (S.view === "admin" || S.view === "admin_providers" || S.view === "admin_users" || S.view === "admin_site") return await viewAdmin(S.view);
   } catch (e) { toast(e.message, true); }
 }
 
@@ -350,19 +402,21 @@ async function viewBanks() {
     const filtered = items;  // 接口已按 industry 过滤
     const cards = filtered.length ? filtered.map(b => `
       <div class="card bank" data-id="${b.id}" data-industry="${b.industry||''}">
-        <div class="meta" style="margin-bottom:10px;justify-content:space-between">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:8px">
           <div style="display:flex;gap:6px;flex-wrap:wrap">
-            <span class="pill ok">${L("status", b.status)}</span>
-            ${b.industry ? `<span class="pill">${L("industry", b.industry)}</span>` : ""}
-            ${b.is_public ? `<span class="pill">公开</span>` : ""}
+            ${b.industry ? `<span class="pill" style="background:var(--accent-soft);color:var(--accent);border-color:transparent">${L("industry",b.industry)}</span>` : ""}
+            <span class="pill ${b.status==="published"?"ok":""}">${L("status",b.status)}</span>
           </div>
           <button class="btn ghost sm del-bank" data-id="${b.id}" data-title="${esc(b.title)}"
-            style="flex:none;color:var(--wrong);border-color:var(--wrong);padding:4px 9px;font-size:12px"
+            style="flex:none;color:var(--wrong);border-color:var(--wrong);padding:3px 8px;font-size:11px"
             onclick="event.stopPropagation()">删除</button>
         </div>
-        <h3>${esc(b.title)}</h3>
-        <div class="desc">${esc(b.description) || "—"}</div>
-        <div class="meta"><span class="count">${b.question_count}<small>题</small></span></div>
+        <h3 style="margin:0 0 4px;font-size:15px;font-weight:600">${esc(b.title)}</h3>
+        <div class="desc">${esc(b.description)||"<span style='opacity:.4'>暂无描述</span>"}</div>
+        <div style="display:flex;align-items:baseline;gap:4px;margin-top:auto;padding-top:12px;border-top:1px solid var(--line)">
+          <span class="bank-count-big">${b.question_count}</span>
+          <small style="font-size:12px;color:var(--muted)">道题</small>
+        </div>
       </div>`).join("") :
       (ind
         ? `<div class="empty" style="grid-column:1/-1"><div class="big">▦</div>没有匹配的题库</div>`
@@ -1499,146 +1553,357 @@ async function viewPlan() {
   });
 }
 
-/* ---------------- 用户管理（admin） ---------------- */
-async function viewAdminUsers() {
+/* ---------------- 系统设置（统一入口） ---------------- */
+const PROVIDER_ICONS = {
+  deepseek:"🔮", qwen:"☁️", minimax:"🌊", zhipu:"🧠",
+  kimi:"🌙", baichuan:"🏔", lingyiwanwu:"✨", groq:"⚡", custom:"🔧",
+};
+
+async function viewAdmin(subview) {
   if (S.user?.role !== "admin") return toast("无权访问", true);
-  const users = await api("/users");
+  if (!subview || subview === "admin") subview = "admin_providers";
+  S.view = subview;
 
-  const rows = users.map(u => `
-    <tr data-uid="${u.id}">
-      <td style="padding:10px 12px">
-        <div style="font-weight:500">${esc(u.username)}</div>
-        <div style="font-size:12px;color:var(--muted)">${esc(u.email)}</div>
-      </td>
-      <td style="padding:10px 12px">
-        <select class="in role-sel" data-uid="${u.id}" style="padding:5px 8px;font-size:12px;width:80px"
-          ${u.id === S.user.id ? "disabled" : ""}>
-          <option value="user"    ${u.role==="user"   ?"selected":""}>用户</option>
-          <option value="editor"  ${u.role==="editor" ?"selected":""}>编辑</option>
-          <option value="admin"   ${u.role==="admin"  ?"selected":""}>管理员</option>
-        </select>
-      </td>
-      <td style="padding:10px 12px">
-        <span class="pill ${u.is_active?"ok":"warn"}">${u.is_active?"正常":"已停用"}</span>
-      </td>
-      <td style="padding:10px 12px;font-size:12px;color:var(--muted)">${new Date(u.created_at).toLocaleDateString("zh-CN")}</td>
-      <td style="padding:10px 12px">
-        ${u.id !== S.user.id ? `
-          <button class="btn ghost sm toggle-active" data-uid="${u.id}" data-active="${u.is_active}" style="font-size:12px">
-            ${u.is_active ? "停用" : "启用"}
-          </button>` : "<span style='font-size:12px;color:var(--muted)'>（本人）</span>"}
-      </td>
-    </tr>`).join("");
+  const tabs = [
+    { v:"admin_providers", l:"AI 模型管理", ic:"🤖" },
+    { v:"admin_users",     l:"用户管理",   ic:"👥" },
+    { v:"admin_site",      l:"站点设置",   ic:"🌐" },
+  ];
 
-  shell("用户管理", `${users.length} 个用户`,
-    `<div class="card" style="padding:0;overflow:hidden">
-       <table style="width:100%;border-collapse:collapse">
-         <thead>
-           <tr style="background:var(--paper);border-bottom:1px solid var(--line)">
-             <th style="padding:10px 12px;text-align:left;font-size:12px;color:var(--muted);font-weight:600">用户</th>
-             <th style="padding:10px 12px;text-align:left;font-size:12px;color:var(--muted);font-weight:600">角色</th>
-             <th style="padding:10px 12px;text-align:left;font-size:12px;color:var(--muted);font-weight:600">状态</th>
-             <th style="padding:10px 12px;text-align:left;font-size:12px;color:var(--muted);font-weight:600">注册时间</th>
-             <th style="padding:10px 12px;text-align:left;font-size:12px;color:var(--muted);font-weight:600">操作</th>
-           </tr>
-         </thead>
-         <tbody style="border-top:1px solid var(--line)">${rows}</tbody>
-       </table>
+  const tabNav = tabs.map(t => `
+    <button class="settings-nav-item ${subview===t.v?"on":""}" data-sub="${t.v}">
+      <span class="sic">${t.ic}</span>${t.l}
+    </button>`).join("");
+
+  let content = "";
+
+  if (subview === "admin_providers") {
+    content = await renderProviders();
+  } else if (subview === "admin_users") {
+    content = await renderUsers();
+  } else if (subview === "admin_site") {
+    content = await renderSiteConfig();
+  }
+
+  shell("系统设置", "ADMIN",
+    `<div class="settings-layout">
+       <div class="settings-nav">${tabNav}</div>
+       <div class="settings-content" id="settings_content">${content}</div>
      </div>`);
 
+  root.querySelectorAll(".settings-nav-item").forEach(b => {
+    b.onclick = () => viewAdmin(b.dataset.sub);
+  });
+
+  bindProviderEvents();
+  bindUserEvents();
+  bindSiteEvents();
+}
+
+/* ── AI 模型管理 ────────────────────── */
+async function renderProviders() {
+  const cfg = await api("/admin/site-config");
+  const providers = await api("/admin/providers");
+  const activeId = cfg.active_provider || "deepseek";
+
+  return providers.map(p => {
+    const isActive = p.id === activeId;
+    const hasKey = p.has_key;
+    let statusHtml = hasKey
+      ? `<span class="tag-verified">✓ 已配置</span>`
+      : `<span class="tag-unset">未配置</span>`;
+    if (isActive) statusHtml += ` <span class="tag-verified" style="background:var(--accent-soft);color:var(--accent);border-color:var(--accent)">● 使用中</span>`;
+
+    return `
+      <div class="provider-card ${isActive?"active-provider":hasKey?"has-key":""}" data-pid="${p.id}">
+        <div class="provider-header">
+          <div class="provider-logo">${PROVIDER_ICONS[p.id] || "🤖"}</div>
+          <div class="provider-info">
+            <div class="provider-name">${esc(p.name)}</div>
+            <div class="provider-status">${statusHtml}</div>
+          </div>
+          <div class="provider-actions">
+            ${hasKey && !isActive ? `<button class="btn ghost sm activate-btn" data-pid="${p.id}" style="font-size:12px">设为默认</button>` : ""}
+            <button class="btn ghost sm expand-btn" data-pid="${p.id}" style="font-size:12px">配置 ▾</button>
+          </div>
+        </div>
+        <div class="provider-body" id="pbody_${p.id}">
+          ${p.id !== "custom" ? "" : `
+            <div><label class="f">Base URL</label>
+              <input class="in" id="purl_${p.id}" value="${esc(p.base_url)}" placeholder="https://your-api.com/v1"></div>`}
+          <div><label class="f">API Key</label>
+            <div style="display:flex;gap:6px">
+              <input class="in pkey" type="password" id="pkey_${p.id}" placeholder="${hasKey?"留空=不修改":"输入 API Key"}" style="flex:1" data-pid="${p.id}">
+              <button class="btn ghost sm pkey-toggle" data-target="pkey_${p.id}" style="flex:none;white-space:nowrap">显示</button>
+            </div>
+            ${hasKey ? `<div style="font-size:12px;color:var(--muted);margin-top:4px">当前：${esc(p.api_key_masked)}</div>` : ""}
+          </div>
+          <div style="display:flex;gap:8px;align-items:flex-end">
+            <div style="flex:1"><label class="f">使用模型</label>
+              <input class="in" id="pmodel_${p.id}" value="${esc(p.model)}" placeholder="${esc(p.default_model)}"></div>
+            <button class="btn ghost sm fetch-models-btn" data-pid="${p.id}" style="flex:none;white-space:nowrap;align-self:flex-end">拉取模型列表</button>
+          </div>
+          <div id="pmodels_${p.id}" style="display:none">
+            <label class="f">从列表选择</label>
+            <select class="in pmodel-sel" data-target="pmodel_${p.id}">
+              <option value="">— 选择模型 —</option>
+            </select>
+          </div>
+          <div style="display:flex;gap:8px;margin-top:4px">
+            <button class="btn sm save-provider-btn" data-pid="${p.id}">保存</button>
+            <button class="btn ghost sm verify-btn" data-pid="${p.id}" ${hasKey?"":"disabled"}>验证 Key</button>
+            ${p.id.startsWith("custom_") ? `<button class="btn ghost sm del-provider-btn" data-pid="${p.id}" style="color:var(--wrong);border-color:var(--wrong);margin-left:auto">删除</button>` : ""}
+          </div>
+          <div id="pverify_${p.id}" style="font-size:12px;margin-top:4px"></div>
+        </div>
+      </div>`;
+  }).join("") + `
+  <button class="btn ghost" id="add_custom_provider" style="width:100%;margin-top:8px">＋ 添加自定义模型商（OpenAI 兼容）</button>
+  <div id="custom_provider_form" style="display:none" class="section-card">
+    <h3>新增自定义模型商</h3>
+    <div class="row">
+      <div><label class="f">名称</label><input class="in" id="cp_name" placeholder="我的 API"></div>
+      <div><label class="f">Base URL</label><input class="in" id="cp_url" placeholder="https://api.example.com/v1"></div>
+    </div>
+    <div class="row" style="margin-top:10px">
+      <div><label class="f">API Key</label><input class="in" id="cp_key" type="password"></div>
+      <div><label class="f">默认模型</label><input class="in" id="cp_model" placeholder="gpt-4o"></div>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:12px">
+      <button class="btn sm" id="cp_save">添加</button>
+      <button class="btn ghost sm" id="cp_cancel">取消</button>
+    </div>
+  </div>`;
+}
+
+function bindProviderEvents() {
+  // 展开/收起
+  root.querySelectorAll(".expand-btn").forEach(btn => {
+    btn.onclick = () => {
+      const body = document.getElementById("pbody_" + btn.dataset.pid);
+      if (!body) return;
+      const open = body.classList.toggle("open");
+      btn.textContent = open ? "收起 ▴" : "配置 ▾";
+    };
+  });
+
+  // 显示/隐藏 key
+  root.querySelectorAll(".pkey-toggle").forEach(btn => {
+    btn.onclick = () => {
+      const inp = document.getElementById(btn.dataset.target);
+      if (!inp) return;
+      inp.type = inp.type === "password" ? "text" : "password";
+      btn.textContent = inp.type === "password" ? "显示" : "隐藏";
+    };
+  });
+
+  // 拉取模型列表
+  root.querySelectorAll(".fetch-models-btn").forEach(btn => {
+    btn.onclick = async () => {
+      const pid = btn.dataset.pid;
+      btn.disabled = true; btn.textContent = "拉取中…";
+      try {
+        // 先保存当前 key（如果有输入）
+        const keyInp = document.getElementById("pkey_" + pid);
+        if (keyInp?.value) {
+          await api(`/admin/providers/${pid}`, { method:"PUT", body:{ api_key: keyInp.value } });
+        }
+        const { models } = await api(`/admin/providers/${pid}/fetch-models`, { method:"POST" });
+        const sel = document.getElementById("pmodels_" + pid)?.querySelector("select");
+        if (sel) {
+          sel.innerHTML = `<option value="">— 选择模型 —</option>` + models.map(m => `<option value="${esc(m)}">${esc(m)}</option>`).join("");
+          document.getElementById("pmodels_" + pid).style.display = "block";
+        }
+        toast(`获取到 ${models.length} 个模型`);
+      } catch(e) { toast(e.message, true); }
+      finally { btn.disabled = false; btn.textContent = "拉取模型列表"; }
+    };
+  });
+
+  // 模型列表选择 → 填入输入框
+  root.querySelectorAll(".pmodel-sel").forEach(sel => {
+    sel.onchange = () => {
+      if (!sel.value) return;
+      const inp = document.getElementById(sel.dataset.target);
+      if (inp) inp.value = sel.value;
+    };
+  });
+
+  // 保存配置
+  root.querySelectorAll(".save-provider-btn").forEach(btn => {
+    btn.onclick = async () => {
+      const pid = btn.dataset.pid;
+      btn.disabled = true; btn.textContent = "保存中…";
+      const body = {};
+      const key = document.getElementById("pkey_" + pid)?.value;
+      if (key) body.api_key = key;
+      const model = document.getElementById("pmodel_" + pid)?.value;
+      if (model) body.model = model;
+      const url = document.getElementById("purl_" + pid)?.value;
+      if (url) body.base_url = url;
+      try {
+        await api(`/admin/providers/${pid}`, { method:"PUT", body });
+        toast("配置已保存"); viewAdmin("admin_providers");
+      } catch(e) { toast(e.message, true); }
+      finally { btn.disabled = false; btn.textContent = "保存"; }
+    };
+  });
+
+  // 设为默认
+  root.querySelectorAll(".activate-btn").forEach(btn => {
+    btn.onclick = async () => {
+      try {
+        await api("/admin/site-config", { method:"PUT", body:{ active_provider: btn.dataset.pid } });
+        toast("已切换默认模型"); viewAdmin("admin_providers");
+      } catch(e) { toast(e.message, true); }
+    };
+  });
+
+  // 验证 Key
+  root.querySelectorAll(".verify-btn").forEach(btn => {
+    btn.onclick = async () => {
+      const pid = btn.dataset.pid;
+      btn.disabled = true; btn.textContent = "验证中…";
+      const statusEl = document.getElementById("pverify_" + pid);
+      try {
+        const res = await api(`/admin/providers/${pid}/verify`, { method:"POST" });
+        if (statusEl) {
+          statusEl.innerHTML = res.valid
+            ? `<span style="color:var(--correct)">✓ ${esc(res.detail)}</span>`
+            : `<span style="color:var(--wrong)">✕ ${esc(res.detail)}</span>`;
+        }
+      } catch(e) {
+        if (statusEl) statusEl.innerHTML = `<span style="color:var(--wrong)">✕ ${esc(e.message)}</span>`;
+      }
+      finally { btn.disabled = false; btn.textContent = "验证 Key"; }
+    };
+  });
+
+  // 删除自定义
+  root.querySelectorAll(".del-provider-btn").forEach(btn => {
+    btn.onclick = async () => {
+      if (!confirm("确定删除该自定义模型商？")) return;
+      try {
+        await api(`/admin/providers/${btn.dataset.pid}`, { method:"DELETE" });
+        toast("已删除"); viewAdmin("admin_providers");
+      } catch(e) { toast(e.message, true); }
+    };
+  });
+
+  // 添加自定义
+  const addBtn = document.getElementById("add_custom_provider");
+  const form = document.getElementById("custom_provider_form");
+  if (addBtn && form) {
+    addBtn.onclick = () => { form.style.display = form.style.display === "none" ? "block" : "none"; };
+    const cpCancel = document.getElementById("cp_cancel");
+    if (cpCancel) cpCancel.onclick = () => { form.style.display = "none"; };
+    const cpSave = document.getElementById("cp_save");
+    if (cpSave) cpSave.onclick = async () => {
+      const name = document.getElementById("cp_name").value.trim();
+      const url = document.getElementById("cp_url").value.trim();
+      const key = document.getElementById("cp_key").value.trim();
+      const model = document.getElementById("cp_model").value.trim();
+      if (!name || !url || !key || !model) return toast("所有字段均为必填", true);
+      try {
+        await api("/admin/providers/custom", { body:{ name, base_url: url, api_key: key, model } });
+        toast("已添加自定义模型商"); viewAdmin("admin_providers");
+      } catch(e) { toast(e.message, true); }
+    };
+  }
+}
+
+/* ── 用户管理 ────────────────────────── */
+async function renderUsers() {
+  const users = await api("/users");
+  const rows = users.map(u => `
+    <tr>
+      <td>
+        <div style="display:flex;align-items:center;gap:10px">
+          <div style="width:30px;height:30px;border-radius:50%;background:var(--accent-soft);display:grid;place-items:center;font-size:12px;font-weight:700;color:var(--accent);flex:none">
+            ${(u.username||"?")[0].toUpperCase()}
+          </div>
+          <div>
+            <div style="font-weight:500">${esc(u.username)}</div>
+            <div style="font-size:12px;color:var(--muted)">${esc(u.email)}</div>
+          </div>
+        </div>
+      </td>
+      <td>
+        <select class="in role-sel" data-uid="${u.id}" style="padding:5px 8px;font-size:12px;width:90px" ${u.id===S.user?.id?"disabled":""}>
+          <option value="user"   ${u.role==="user"  ?"selected":""}>用户</option>
+          <option value="editor" ${u.role==="editor"?"selected":""}>编辑</option>
+          <option value="admin"  ${u.role==="admin" ?"selected":""}>管理员</option>
+        </select>
+      </td>
+      <td><span class="pill ${u.is_active?"ok":"warn"}">${u.is_active?"正常":"已停用"}</span></td>
+      <td style="color:var(--muted)">${new Date(u.created_at).toLocaleDateString("zh-CN")}</td>
+      <td>
+        ${u.id!==S.user?.id ? `
+          <button class="btn ghost sm toggle-user" data-uid="${u.id}" data-active="${u.is_active}" style="font-size:12px">
+            ${u.is_active?"停用":"启用"}
+          </button>` : `<span style="font-size:12px;color:var(--muted)">当前账号</span>`}
+      </td>
+    </tr>`).join("");
+  return `
+    <div class="section-card" style="padding:0;overflow:hidden">
+      <table class="admin-table">
+        <thead><tr>
+          <th>用户</th><th>角色</th><th>状态</th><th>注册时间</th><th>操作</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+}
+
+function bindUserEvents() {
   root.querySelectorAll(".role-sel").forEach(sel => {
     sel.onchange = async () => {
       try {
-        await api("/users/" + sel.dataset.uid, { method: "PUT", body: { role: sel.value } });
+        await api("/users/" + sel.dataset.uid, { method:"PUT", body:{ role: sel.value } });
         toast("角色已更新");
-        sel.dataset.orig = sel.value;
-      } catch(e) { toast(e.message, true); sel.value = sel.dataset.orig; }
+      } catch(e) { toast(e.message, true); }
     };
-    sel.dataset.orig = sel.value;
   });
-
-  root.querySelectorAll(".toggle-active").forEach(btn => {
+  root.querySelectorAll(".toggle-user").forEach(btn => {
     btn.onclick = async () => {
       const active = btn.dataset.active === "true";
       if (!confirm(`确定${active?"停用":"启用"}该用户？`)) return;
       try {
         await api("/users/" + btn.dataset.uid, { method: active ? "DELETE" : "PUT", body: active ? undefined : { is_active: true } });
-        toast(active ? "用户已停用" : "用户已启用");
-        viewAdminUsers();
+        toast(active ? "已停用" : "已启用"); viewAdmin("admin_users");
       } catch(e) { toast(e.message, true); }
     };
   });
 }
 
-/* ---------------- 系统设置（admin） ---------------- */
-async function viewAdminConfig() {
-  if (S.user?.role !== "admin") return toast("无权访问", true);
-  const cfg = await api("/admin/config");
+/* ── 站点设置 ────────────────────────── */
+async function renderSiteConfig() {
+  const cfg = await api("/admin/site-config");
+  return `
+    <div class="section-card">
+      <h3>站点设置</h3>
+      <div class="fld"><label class="f">站点名称</label><input class="in" id="site_name" value="${esc(cfg.site_name)}"></div>
+      <div class="fld" style="display:flex;align-items:center;gap:10px">
+        <input type="checkbox" id="site_reg" ${cfg.allow_register?"checked":""} style="width:16px;height:16px">
+        <label for="site_reg" style="font-size:14px;cursor:pointer">允许新用户注册</label>
+      </div>
+      <button class="btn" id="save_site_btn">保存站点设置</button>
+    </div>`;
+}
 
-  shell("系统设置", "ADMIN",
-    `<div style="max-width:560px">
-       <div class="card" style="margin-bottom:16px">
-         <div style="font-weight:600;font-size:15px;margin-bottom:16px">DeepSeek API 配置</div>
-         <div class="fld">
-           <label class="f">API Key</label>
-           <div style="display:flex;gap:8px">
-             <input class="in" id="cfg_key" type="password" placeholder="输入新的 API Key（留空不修改）" style="flex:1">
-             <button class="btn ghost sm" id="cfg_key_toggle" style="flex:none;white-space:nowrap">显示</button>
-           </div>
-           <div style="font-size:12px;color:var(--muted);margin-top:4px">当前：${esc(cfg.deepseek_api_key_masked || "未配置")}</div>
-         </div>
-         <div class="fld">
-           <label class="f">Base URL</label>
-           <input class="in" id="cfg_url" value="${esc(cfg.deepseek_base_url)}">
-         </div>
-         <div class="fld">
-           <label class="f">模型名称</label>
-           <input class="in" id="cfg_model" value="${esc(cfg.deepseek_model)}">
-           <div style="font-size:12px;color:var(--muted);margin-top:4px">如：deepseek-chat、deepseek-coder</div>
-         </div>
-       </div>
-
-       <div class="card" style="margin-bottom:16px">
-         <div style="font-weight:600;font-size:15px;margin-bottom:16px">站点设置</div>
-         <div class="fld">
-           <label class="f">站点名称</label>
-           <input class="in" id="cfg_name" value="${esc(cfg.site_name)}">
-         </div>
-         <div class="fld" style="display:flex;align-items:center;gap:10px">
-           <input type="checkbox" id="cfg_reg" ${cfg.allow_register?"checked":""} style="width:16px;height:16px">
-           <label for="cfg_reg" style="font-size:14px">允许新用户注册</label>
-         </div>
-       </div>
-
-       <button class="btn" id="cfg_save" style="width:100%">保存配置</button>
-     </div>`);
-
-  document.getElementById("cfg_key_toggle").onclick = () => {
-    const inp = document.getElementById("cfg_key");
-    const isPass = inp.type === "password";
-    inp.type = isPass ? "text" : "password";
-    document.getElementById("cfg_key_toggle").textContent = isPass ? "隐藏" : "显示";
-  };
-
-  document.getElementById("cfg_save").onclick = async () => {
-    const btn = document.getElementById("cfg_save");
+function bindSiteEvents() {
+  document.getElementById("save_site_btn")?.addEventListener("click", async () => {
+    const btn = document.getElementById("save_site_btn");
     btn.disabled = true; btn.textContent = "保存中…";
-    const body = {};
-    const key = document.getElementById("cfg_key").value.trim();
-    if (key) body.deepseek_api_key = key;
-    const url = document.getElementById("cfg_url").value.trim();
-    if (url) body.deepseek_base_url = url;
-    const model = document.getElementById("cfg_model").value.trim();
-    if (model) body.deepseek_model = model;
-    body.site_name = document.getElementById("cfg_name").value.trim();
-    body.allow_register = document.getElementById("cfg_reg").checked;
     try {
-      await api("/admin/config", { method: "PUT", body });
-      toast("配置已保存，即时生效");
-      document.getElementById("cfg_key").value = "";
+      await api("/admin/site-config", { method:"PUT", body:{
+        site_name: document.getElementById("site_name")?.value.trim(),
+        allow_register: document.getElementById("site_reg")?.checked,
+      }});
+      toast("站点设置已保存");
     } catch(e) { toast(e.message, true); }
-    finally { btn.disabled = false; btn.textContent = "保存配置"; }
-  };
+    finally { btn.disabled = false; btn.textContent = "保存站点设置"; }
+  });
 }
 
 /* ---------------- boot ---------------- */

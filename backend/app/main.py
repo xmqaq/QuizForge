@@ -24,18 +24,10 @@ from app.routers import (
 async def lifespan(_: FastAPI):
     async with async_engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-    # 用 redis 里持久化的系统配置覆盖默认 DeepSeek 客户端（管理员在系统设置改过则生效）
-    # redis 不可用时不阻塞启动，退回 .env 默认值即可
+    # 从 Redis 加载激活的 AI 模型商配置，覆盖 .env 默认值
+    # redis 未就绪时静默失败，使用 .env 默认配置
     try:
-        from app.config import settings
-        from app.services import ai_service
-
-        cfg = admin.get_config()
-        ai_service.reload_client(
-            api_key=cfg.get("deepseek_api_key") or settings.DEEPSEEK_API_KEY,
-            base_url=cfg.get("deepseek_base_url") or settings.DEEPSEEK_BASE_URL,
-            model=cfg.get("deepseek_model") or settings.DEEPSEEK_MODEL,
-        )
+        admin._reload_ai_client()
     except Exception:  # ponytail: redis 抖动不该拖垮整个 API 启动
         pass
     yield
