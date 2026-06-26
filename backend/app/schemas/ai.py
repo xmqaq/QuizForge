@@ -9,7 +9,7 @@ class GenerateRequest(BaseModel):
     bank_id: uuid.UUID
     topic: str = Field(examples=["SQL注入攻击原理与防御"])
     difficulty: Difficulty = Difficulty.medium
-    count: int = Field(default=10, ge=1, le=50)
+    count: int = Field(default=10, ge=1, le=100)
     auto_approve: bool = False
 
 

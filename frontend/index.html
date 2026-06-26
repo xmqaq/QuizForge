@@ -74,7 +74,10 @@
   .btn.ghost { background: var(--card); color: var(--ink); border: 1px solid var(--line); }
   .btn.ghost:hover { border-color: var(--ink); filter: none; }
   .btn.sm { padding: 7px 12px; font-size: 13px; }
-  .topic-tag.on { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
+  .topic-tag { font-size:12px; padding:4px 11px; border-radius:999px; border:1.5px solid var(--line);
+    background:var(--card); color:var(--muted); cursor:pointer; transition:all .12s; white-space:nowrap; }
+  .topic-tag:hover { border-color:#b0b4be; color:var(--ink); }
+  .topic-tag.on { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); font-weight:600; }
   label.f { display: block; font-size: 12px; font-weight: 600; color: var(--muted); margin: 0 0 6px; letter-spacing: .2px; }
   .in { width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 9px; background: #fff; color: var(--ink); }
   .in:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
@@ -186,6 +189,16 @@ function toast(msg, err) {
 }
 const esc = (s) => (s ?? "").toString().replace(/[&<>"]/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;" }[c]));
 
+/* ---------------- 枚举中文映射 ---------------- */
+const LABEL = {
+  status: { published:"已发布", draft:"草稿", archived:"已归档" },
+  qstatus: { approved:"已通过", pending_review:"待审核", rejected:"已拒绝" },
+  difficulty: { easy:"基础", medium:"进阶", hard:"综合" },
+  mode: { random:"随机", sequential:"顺序", wrong_only:"错题", simulation:"模拟" },
+  industry: { it:"IT", medical:"医疗", finance:"金融", education:"教育", construction:"建筑", language:"语言", other:"其他" },
+};
+const L = (type, val) => LABEL[type]?.[val] || val;
+
 /* ---------------- auth ---------------- */
 function renderAuth() {
   let tab = "login";
@@ -264,65 +277,100 @@ async function route() {
 /* ---------------- 题库 list ---------------- */
 async function viewBanks() {
   const { items } = await api("/banks?size=100");
-  const indLabel = { it:"IT", medical:"医疗", finance:"金融", education:"教育", construction:"建筑", language:"语言", other:"其他" };
-  const cards = items.length ? items.map(b => `
-    <div class="card bank" data-id="${b.id}" data-industry="${b.industry||''}">
-      <div class="meta" style="margin-bottom:10px">
-        <span class="pill ${b.status==="published"?"ok":""}">${b.status}</span>
-        ${b.is_public ? `<span class="pill">公开</span>` : ""}
-        ${b.industry ? `<span class="pill">${indLabel[b.industry]||b.industry}</span>` : ""}
-      </div>
-      <h3>${esc(b.title)}</h3>
-      <div class="desc">${esc(b.description) || "—"}</div>
-      <div class="meta"><span class="count">${b.question_count}<small>题</small></span></div>
-    </div>`).join("") : `<div class="empty" style="grid-column:1/-1"><div class="big">▦</div>还没有题库，新建一个开始吧</div>`;
-  shell("题库", `${items.length} BANKS`,
-    `<div style="margin-bottom:18px"><button class="btn" id="new">＋ 新建题库</button></div>
-     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px" id="ind-tabs">
-       ${[["","全部"],["it","IT"],["medical","医疗"],["finance","金融"],["education","教育"],["construction","建筑"],["language","语言"],["other","其他"]]
-         .map(([v,l])=>`<button class="btn ghost sm ind-tab" data-ind="${v}">${l}</button>`).join("")}
-     </div>
-     <div class="grid cols">${cards}</div>`);
-  document.getElementById("new").onclick = newBankForm;
-  document.querySelectorAll(".bank").forEach(c => c.onclick = () => { S.bank = c.dataset.id; S.view = "bank"; route(); });
-  let currentInd = "";
-  const filterBanks = () => {
-    document.querySelectorAll(".bank").forEach(c => {
-      const match = !currentInd || c.dataset.industry === currentInd;
-      c.style.display = match ? "" : "none";
+  let filter = "";
+  const render = (ind) => {
+    const filtered = ind ? items.filter(b => b.industry === ind) : items;
+    const cards = filtered.length ? filtered.map(b => `
+      <div class="card bank" data-id="${b.id}" data-industry="${b.industry||''}">
+        <div class="meta" style="margin-bottom:10px;justify-content:space-between">
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            <span class="pill ok">${L("status", b.status)}</span>
+            ${b.industry ? `<span class="pill">${L("industry", b.industry)}</span>` : ""}
+            ${b.is_public ? `<span class="pill">公开</span>` : ""}
+          </div>
+          <button class="btn ghost sm del-bank" data-id="${b.id}" data-title="${esc(b.title)}"
+            style="flex:none;color:var(--wrong);border-color:var(--wrong);padding:4px 9px;font-size:12px"
+            onclick="event.stopPropagation()">删除</button>
+        </div>
+        <h3>${esc(b.title)}</h3>
+        <div class="desc">${esc(b.description) || "—"}</div>
+        <div class="meta"><span class="count">${b.question_count}<small>题</small></span></div>
+      </div>`).join("") :
+      `<div class="empty" style="grid-column:1/-1"><div class="big">▦</div>没有匹配的题库</div>`;
+
+    const inds = [["","全部"],["it","IT"],["medical","医疗"],["finance","金融"],
+                  ["education","教育"],["construction","建筑"],["language","语言"],["other","其他"]];
+    shell("题库", `${items.length} 个题库`,
+      `<div style="margin-bottom:16px"><button class="btn" id="new">＋ 新建题库</button></div>
+       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px">
+         ${inds.map(([v,l])=>`<button class="btn ghost sm ind-tab${filter===v?" on":""}" data-ind="${v}"
+           style="${filter===v?"background:var(--accent);color:#fff;border-color:var(--accent)":""}">${l}</button>`).join("")}
+       </div>
+       <div class="grid cols">${cards}</div>`);
+
+    document.getElementById("new").onclick = newBankForm;
+    document.querySelectorAll(".ind-tab").forEach(b => b.onclick = () => {
+      filter = b.dataset.ind; render(filter);
+    });
+    document.querySelectorAll(".bank").forEach(c => c.onclick = () => {
+      S.bank = c.dataset.id; S.view = "bank"; route();
+    });
+    document.querySelectorAll(".del-bank").forEach(b => b.onclick = async (e) => {
+      e.stopPropagation();
+      if (!confirm(`确定删除题库「${b.dataset.title}」？\n题库内所有题目将一并删除，此操作不可恢复。`)) return;
+      try {
+        await api("/banks/" + b.dataset.id, { method: "DELETE" });
+        toast("题库已删除");
+        items.splice(items.findIndex(x => x.id === b.dataset.id), 1);
+        render(filter);
+      } catch(e) { toast(e.message, true); }
     });
   };
-  document.querySelectorAll(".ind-tab").forEach(b => b.onclick = () => {
-    currentInd = b.dataset.ind;
-    document.querySelectorAll(".ind-tab").forEach(x => x.classList.toggle("on", x === b));
-    filterBanks();
-  });
+  render(filter);
 }
+
 function newBankForm() {
+  if (document.getElementById("nbf")) return;
   const body = document.getElementById("body");
   body.insertAdjacentHTML("afterbegin", `
     <div class="card" id="nbf" style="margin-bottom:18px">
-      <div class="row"><div style="flex:2"><label class="f">标题</label><input class="in" id="nb_title" placeholder="如：网络安全基础"></div>
-      <div style="flex:3"><label class="f">描述（可选）</label><input class="in" id="nb_desc"></div>
-      <div style="flex:2"><label class="f">行业分类</label>
-        <select class="in" id="nb_industry">
-          <option value="it">信息技术</option>
-          <option value="medical">医疗卫生</option>
-          <option value="finance">金融财会</option>
-          <option value="education">教育培训</option>
-          <option value="construction">建筑工程</option>
-          <option value="language">语言考试</option>
-          <option value="other">其他</option>
-        </select></div></div>
-      <div class="row" style="margin-top:12px;justify-content:flex-end"><div style="flex:none"><button class="btn sm" id="nb_save">创建</button>
-      <button class="btn ghost sm" id="nb_cancel">取消</button></div></div>
+      <div style="font-weight:600;margin-bottom:12px">新建题库</div>
+      <div class="row">
+        <div style="flex:2"><label class="f">标题 *</label><input class="in" id="nb_title" placeholder="如：英语四级备考"></div>
+        <div style="flex:2"><label class="f">描述（可选）</label><input class="in" id="nb_desc"></div>
+        <div style="flex:1;min-width:110px"><label class="f">行业分类</label>
+          <select class="in" id="nb_industry">
+            <option value="it">IT / 网络安全</option>
+            <option value="language">语言考试</option>
+            <option value="medical">医疗卫生</option>
+            <option value="finance">金融财会</option>
+            <option value="education">教育培训</option>
+            <option value="construction">建筑工程</option>
+            <option value="other">其他</option>
+          </select></div>
+      </div>
+      <div class="row" style="margin-top:12px;justify-content:flex-end">
+        <div style="flex:none">
+          <button class="btn sm" id="nb_save">创建</button>
+          <button class="btn ghost sm" id="nb_cancel" style="margin-left:8px">取消</button>
+        </div>
+      </div>
     </div>`);
   document.getElementById("nb_cancel").onclick = () => document.getElementById("nbf").remove();
   document.getElementById("nb_save").onclick = async () => {
     const title = document.getElementById("nb_title").value.trim();
-    if (!title) return toast("请填写标题", true);
-    await api("/banks", { body: { title, description: document.getElementById("nb_desc").value.trim() || null, industry: document.getElementById("nb_industry").value, status: "published" } });
-    toast("题库已创建"); viewBanks();
+    if (!title) return toast("请填写题库标题", true);
+    try {
+      await api("/banks", { body: {
+        title,
+        description: document.getElementById("nb_desc").value.trim() || null,
+        industry: document.getElementById("nb_industry").value,
+        status: "published"
+      }});
+      toast("题库已创建");
+      document.getElementById("nbf").remove();
+      viewBanks();
+    } catch(e) { toast(e.message, true); }
   };
 }
 
@@ -330,49 +378,54 @@ function newBankForm() {
 async function viewBankDetail() {
   const b = await api("/banks/" + S.bank);
   const { items } = await api("/questions?bank_id=" + S.bank + "&size=100");
+
   const qlist = items.length ? items.map((q, i) => `
     <div class="card" style="margin-bottom:10px" data-qid="${q.id}">
-      <div class="meta" style="margin-bottom:8px;display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+      <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:8px">
         <span class="pill">${String(i+1).padStart(2,"0")}</span>
-        <span class="pill ${q.status==="approved"?"ok":q.status==="rejected"?"":"warn"}">${q.status==="approved"?"已通过":q.status==="rejected"?"已拒绝":"待审核"}</span>
-        <span class="pill">${q.difficulty==="easy"?"基础":q.difficulty==="medium"?"进阶":"综合"}</span>
-        <span style="margin-left:auto"><button class="btn ghost sm" onclick="toggleQ('${q.id}')">展开</button>
-        ${q.status==="pending_review" ? `
-          <button class="btn sm" style="margin-left:6px;background:var(--correct);border:none" onclick="approveQ('${q.id}')">通过</button>
-          <button class="btn sm" style="margin-left:4px;background:var(--wrong);border:none" onclick="rejectQ('${q.id}')">拒绝</button>` : ""}
+        <span class="pill ${q.status==="approved"?"ok":q.status==="rejected"?"":"warn"}">${L("qstatus",q.status)}</span>
+        <span class="pill">${L("difficulty",q.difficulty)}</span>
+        <span style="margin-left:auto;display:flex;gap:6px">
+          <button class="btn ghost sm" style="font-size:12px" onclick="toggleQ('${q.id}')">展开</button>
+          ${q.status==="pending_review"?`
+            <button class="btn sm" style="background:var(--correct);border:none;font-size:12px" onclick="approveQ('${q.id}')">通过</button>
+            <button class="btn sm" style="background:var(--wrong);border:none;font-size:12px" onclick="rejectQ('${q.id}')">拒绝</button>`:""}
         </span>
       </div>
-      <div style="font-weight:500;margin-bottom:4px">${esc(q.content)}</div>
+      <div style="font-weight:500">${esc(q.content)}</div>
       <div id="qdet_${q.id}" style="display:none;margin-top:10px">
-        ${["A","B","C","D"].map(L=>`
+        ${["A","B","C","D"].map(L2=>`
           <div style="padding:7px 10px;margin-bottom:5px;border-radius:8px;font-size:13px;
-            background:${q.correct_answer===L?"var(--correct-soft)":"var(--paper)"};
-            border:1px solid ${q.correct_answer===L?"var(--correct)":"var(--line)"}">
-            <b>${L}.</b> ${esc(q["option_"+L.toLowerCase()])}
-            ${q.correct_answer===L?"<span style='color:var(--correct);margin-left:6px;font-size:12px'>✓ 正确答案</span>":""}
+            background:${q.correct_answer===L2?"var(--correct-soft)":"var(--paper)"};
+            border:1px solid ${q.correct_answer===L2?"var(--correct)":"var(--line)"}">
+            <b>${L2}.</b> ${esc(q["option_"+L2.toLowerCase()])}
+            ${q.correct_answer===L2?`<span style="color:var(--correct);margin-left:6px;font-size:12px">✓ 正确答案</span>`:""}
           </div>`).join("")}
-        ${q.explanation ? `<div class="explain" style="margin-top:8px;font-size:13px">${esc(q.explanation)}</div>` : ""}
+        ${q.explanation?`<div class="explain" style="margin-top:8px;font-size:13px">${esc(q.explanation)}</div>`:""}
       </div>
-    </div>`).join("") : `<div class="empty"><div class="big">✎</div>这个题库还没有题目，用 AI 生成一批</div>`;
+    </div>`).join("") :
+    `<div class="empty"><div class="big">✎</div>这个题库还没有题目，用 AI 生成一批</div>`;
+
   shell(esc(b.title), `${b.question_count} 题`,
-    `<div class="row" style="margin-bottom:20px;flex:none">
-       <div style="flex:none"><button class="btn" id="start" ${b.question_count?"":"disabled"}>开始答题</button>
-       <button class="btn ghost" id="back">← 返回题库</button></div></div>
+    `<div style="display:flex;gap:10px;margin-bottom:20px;flex-wrap:wrap">
+       <button class="btn" id="start" ${b.question_count?"":"disabled"}>开始答题</button>
+       <button class="btn ghost" id="back">← 返回题库</button>
+     </div>
+
      <div class="card" style="margin-bottom:24px">
+       <!-- 区块一：按知识点 AI 出题 -->
+       <div style="font-weight:700;font-size:15px;margin-bottom:3px">⚡ AI 出题</div>
+       <div style="font-size:12px;color:var(--muted);margin-bottom:14px">选择或输入知识点，AI 生成覆盖完整的选择题</div>
 
-       <!-- 区块一：按主题 AI 出题 -->
-       <div style="font-weight:700;margin-bottom:4px;font-size:15px">⚡ AI 出题</div>
-       <div style="font-size:12px;color:var(--muted);margin-bottom:14px">输入知识点主题，AI 直接生成选择题</div>
-
-       <div class="row" style="align-items:flex-end">
+       <div class="row" style="align-items:flex-end;gap:10px">
          <div style="flex:3">
-           <label class="f">知识点 / 主题</label>
-           <div style="display:flex;gap:6px">
-             <input class="in" id="ai_topic" placeholder="${getTopicPlaceholder(b.title)}" style="flex:1">
-             <button class="btn ghost sm" id="ai_suggest" title="AI 推荐知识点" style="flex:none;white-space:nowrap">✨ 推荐</button>
+           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+             <label class="f" style="margin:0">知识点 / 主题</label>
+             <button id="ai_suggest" style="font-size:12px;padding:3px 10px;border-radius:99px;border:1px solid var(--line);background:var(--card);color:var(--accent);cursor:pointer">✨ AI 推荐</button>
            </div>
+           <input class="in" id="ai_topic" placeholder="${getTopicPlaceholder(b.title)}">
          </div>
-         <div style="min-width:90px">
+         <div style="min-width:88px">
            <label class="f">难度</label>
            <select class="in" id="ai_diff">
              <option value="easy">基础</option>
@@ -380,43 +433,33 @@ async function viewBankDetail() {
              <option value="hard">综合</option>
            </select>
          </div>
-         <div style="min-width:80px">
+         <div style="min-width:72px">
            <label class="f">数量</label>
-           <input class="in" id="ai_count" type="number" value="5" min="1" max="50">
+           <input class="in" id="ai_count" type="number" value="10" min="1" max="100">
          </div>
        </div>
 
-       <!-- AI 推荐知识点 tag 区域（默认隐藏） -->
-       <div id="ai_topics_wrap" style="display:none;margin-top:10px">
-         <div style="font-size:12px;color:var(--muted);margin-bottom:6px">点击选择，或手动输入：</div>
+       <!-- 推荐知识点多选 tag 区 -->
+       <div id="ai_topics_wrap" style="display:none;margin-top:10px;padding:10px;background:var(--paper);border-radius:9px">
+         <div style="font-size:12px;color:var(--muted);margin-bottom:8px">点击勾选知识点（可多选），自动填入上方输入框：</div>
          <div id="ai_topics_list" style="display:flex;gap:6px;flex-wrap:wrap"></div>
        </div>
 
-       <div class="row" style="margin-top:12px;align-items:center">
-         <label style="flex:none;font-size:13px;color:var(--muted)">
-           <input type="checkbox" id="ai_auto" checked> 自动审核通过
-         </label>
-         <div style="flex:1"></div>
-         <div style="flex:none">
-           <button class="btn" id="ai_go">生成题目</button>
-         </div>
+       <div style="display:flex;align-items:center;margin-top:12px">
+         <label style="font-size:13px;color:var(--muted);flex:1"><input type="checkbox" id="ai_auto" checked> 自动审核通过</label>
+         <button class="btn" id="ai_go">生成题目</button>
        </div>
 
-       <!-- 分隔线 -->
+       <!-- 分隔 -->
        <div style="border-top:1px dashed var(--line);margin:20px 0"></div>
 
-       <!-- 区块二：上传知识文档出题（独立参数） -->
-       <div style="font-weight:700;margin-bottom:4px;font-size:15px">📄 上传知识文档出题</div>
-       <div style="font-size:12px;color:var(--muted);margin-bottom:14px">
-         AI 将读取文档内容作为知识来源，据此生成选择题（支持 PDF / Word / TXT / MD）
-       </div>
+       <!-- 区块二：上传文档出题（独立参数） -->
+       <div style="font-weight:700;font-size:15px;margin-bottom:3px">📄 上传知识文档出题</div>
+       <div style="font-size:12px;color:var(--muted);margin-bottom:12px">AI 将读取文档内容作为知识来源，据此生成选择题（支持 PDF / Word / TXT / MD）</div>
 
-       <div style="margin-bottom:10px">
-         <input class="in" id="ai_file" type="file" accept=".pdf,.docx,.txt,.md">
-       </div>
-
-       <div class="row" style="align-items:flex-end">
-         <div style="min-width:90px">
+       <input class="in" id="ai_file" type="file" accept=".pdf,.docx,.txt,.md" style="margin-bottom:10px">
+       <div class="row" style="align-items:flex-end;gap:10px">
+         <div style="min-width:88px">
            <label class="f">难度</label>
            <select class="in" id="ai_file_diff">
              <option value="easy">基础</option>
@@ -424,77 +467,172 @@ async function viewBankDetail() {
              <option value="hard">综合</option>
            </select>
          </div>
-         <div style="min-width:80px">
+         <div style="min-width:72px">
            <label class="f">生成数量</label>
-           <input class="in" id="ai_file_count" type="number" value="10" min="1" max="50">
+           <input class="in" id="ai_file_count" type="number" value="10" min="1" max="100">
          </div>
-         <div style="flex:none">
+         <div style="flex:none;padding-bottom:0">
            <label class="f" style="visibility:hidden">操作</label>
            <button class="btn ghost" id="ai_file_go">上传并生成题目</button>
          </div>
        </div>
 
-       <!-- 共用进度条（两种模式共享） -->
+       <!-- 共用进度区 -->
        <div id="ai_prog" style="display:none;margin-top:16px">
-         <div class="progress"><i id="ai_bar" style="width:0"></i></div>
-         <div class="muted" id="ai_msg" style="font-size:13px;margin-top:8px"></div>
+         <div class="progress" style="margin-bottom:8px"><i id="ai_bar" style="width:0;transition:width .4s"></i></div>
+         <div id="ai_msg" style="font-size:13px;color:var(--muted)"></div>
        </div>
-
      </div>
-     <div>${qlist}</div>`);
+
+     <div id="qlist_wrap">${qlist}</div>`);
+
   document.getElementById("back").onclick = () => go("banks");
   document.getElementById("start").onclick = () => openQuizConfig(b.title);
   document.getElementById("ai_go").onclick = runAI;
-  document.getElementById("ai_suggest").onclick = () => suggestTopics(b.title);
   document.getElementById("ai_file_go").onclick = runAIFile;
+  document.getElementById("ai_suggest").onclick = () => suggestTopics(b.title);
+
+  window.toggleQ = (id) => {
+    const det = document.getElementById("qdet_" + id);
+    const btn = det?.closest("[data-qid]")?.querySelector("button[onclick*='toggleQ']");
+    if (!det) return;
+    const open = det.style.display === "none";
+    det.style.display = open ? "block" : "none";
+    if (btn) btn.textContent = open ? "收起" : "展开";
+  };
+  window.approveQ = async (id) => {
+    try { await api("/questions/" + id + "/approve", { method:"POST" }); toast("已通过"); viewBankDetail(); }
+    catch(e) { toast(e.message, true); }
+  };
+  window.rejectQ = async (id) => {
+    try { await api("/questions/" + id + "/reject", { method:"POST" }); toast("已拒绝"); viewBankDetail(); }
+    catch(e) { toast(e.message, true); }
+  };
 }
 
-window.toggleQ = (id) => {
-  const det = document.getElementById("qdet_" + id);
-  const card = det?.closest(".card");
-  const btn = card?.querySelector("button[onclick*='toggleQ']");
-  if (!det) return;
-  const open = det.style.display === "none";
-  det.style.display = open ? "block" : "none";
-  if (btn) btn.textContent = open ? "收起" : "展开";
-};
-window.approveQ = async (id) => {
-  try {
-    await api("/questions/" + id + "/approve", { method: "POST" });
-    toast("已通过审核"); viewBankDetail();
-  } catch(e) { toast(e.message, true); }
-};
-window.rejectQ = async (id) => {
-  try {
-    await api("/questions/" + id + "/reject", { method: "POST" });
-    toast("已拒绝"); viewBankDetail();
-  } catch(e) { toast(e.message, true); }
-};
+const STATUS_LABEL = { queued:"排队等待中", processing:"生成中", done:"已完成", failed:"生成失败" };
 
-// shared task polling for both AI generation paths
 async function pollGenerate(task_id) {
-  const bar = document.getElementById("ai_bar"), msg = document.getElementById("ai_msg");
-  for (let i = 0; i < 40; i++) {
-    await new Promise(r => setTimeout(r, 1500));
-    let st; try { st = await api("/ai/task/" + task_id); } catch { continue; }
-    const pct = st.total ? Math.round((st.generated / st.total) * 100) : st.progress || 0;
-    bar.style.width = Math.max(pct, st.status === "processing" ? 8 : pct) + "%";
-    msg.textContent = `${st.status} · 已生成 ${st.generated || 0}/${st.total || "?"}`;
-    if (st.status === "done") { bar.style.width = "100%"; toast(`生成 ${st.generated} 道题`); return viewBankDetail(); }
-    if (st.status === "failed") throw new Error(st.error_message || "生成失败");
+  const bar = document.getElementById("ai_bar");
+  const msg = document.getElementById("ai_msg");
+  let fakeProgress = 0;
+
+  // 在 AI 调用阶段（generated=0 时）用伪进度动画让进度条动起来
+  const fakeTick = setInterval(() => {
+    const barEl = document.getElementById("ai_bar");
+    if (!barEl) { clearInterval(fakeTick); return; }
+    // 伪进度最多涨到 30%，等真实进度追上后停止
+    if (fakeProgress < 30) {
+      fakeProgress += (30 - fakeProgress) * 0.08; // 缓动，越来越慢
+      barEl.style.width = fakeProgress.toFixed(1) + "%";
+    }
+  }, 300);
+
+  try {
+    for (let i = 0; i < 60; i++) {
+      await new Promise(r => setTimeout(r, 1500));
+      let st;
+      try { st = await api("/ai/task/" + task_id); } catch { continue; }
+
+      const statusText = STATUS_LABEL[st.status] || st.status;
+      const generated = st.generated || 0;
+      const total = st.total || 0;
+
+      if (st.status === "queued") {
+        msg.textContent = "⏳ 排队等待中…";
+        continue;
+      }
+
+      if (st.status === "processing") {
+        // 真实进度：已入库题目 / 总数
+        const realPct = total > 0 ? (generated / total) * 100 : 0;
+        // 取伪进度和真实进度的最大值，保证进度条不回退
+        const displayPct = Math.max(fakeProgress, realPct);
+        fakeProgress = displayPct; // 同步伪进度，防止回退
+        const barEl = document.getElementById("ai_bar");
+        if (barEl) barEl.style.width = displayPct.toFixed(1) + "%";
+        msg.textContent = total > 0
+          ? `⚡ 生成中… 已完成 ${generated} / ${total} 题`
+          : "⚡ AI 正在生成题目，请稍候…";
+        continue;
+      }
+
+      if (st.status === "done") {
+        clearInterval(fakeTick);
+        const barEl = document.getElementById("ai_bar");
+        if (barEl) barEl.style.width = "100%";
+        const msgEl = document.getElementById("ai_msg");
+        if (msgEl) msgEl.textContent = `✓ 生成完成，共 ${generated} 道题`;
+        toast(`✓ 成功生成 ${generated} 道题目`);
+        // 延迟 800ms 再刷新，让用户看到 100% 完成状态
+        setTimeout(() => viewBankDetail(), 800);
+        return;
+      }
+
+      if (st.status === "failed") {
+        clearInterval(fakeTick);
+        throw new Error(st.error_message || "生成失败，请重试");
+      }
+    }
+    // 超时但任务可能仍在后台运行
+    clearInterval(fakeTick);
+    toast("生成耗时较长，题目将在后台继续生成，请稍后刷新题库查看", false);
+  } catch(e) {
+    clearInterval(fakeTick);
+    throw e;
   }
-  throw new Error("任务超时，请稍后在题库查看");
+}
+
+let _generating = false; // 防止重复提交
+
+function _lockGenerate(lock) {
+  _generating = lock;
+  ["ai_go", "ai_file_go"].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.disabled = lock;
+  });
+}
+
+async function runAI() {
+  if (_generating) return;
+  const topic = document.getElementById("ai_topic").value.trim();
+  if (!topic) return toast("请填写或选择知识点主题", true);
+  _lockGenerate(true);
+  const prog = document.getElementById("ai_prog");
+  const bar = document.getElementById("ai_bar");
+  const msg = document.getElementById("ai_msg");
+  prog.style.display = "block";
+  bar.style.width = "0%";
+  msg.textContent = "⏳ 提交任务…";
+  try {
+    const { task_id } = await api("/ai/generate", { body: {
+      bank_id: S.bank,
+      topic,
+      difficulty: document.getElementById("ai_diff").value,
+      count: Number(document.getElementById("ai_count").value),
+      auto_approve: document.getElementById("ai_auto").checked,
+    }});
+    await pollGenerate(task_id);
+  } catch(e) {
+    toast(e.message, true);
+    const msgEl = document.getElementById("ai_msg");
+    if (msgEl) msgEl.textContent = "✕ " + e.message;
+  } finally {
+    _lockGenerate(false);
+  }
 }
 
 async function runAIFile() {
+  if (_generating) return;
   const f = document.getElementById("ai_file").files[0];
   if (!f) return toast("请先选择文件", true);
-  // 禁用两个出题按钮，防止重复提交
-  const allAiBtns = [document.getElementById("ai_go"), document.getElementById("ai_file_go")];
-  allAiBtns.forEach(b => { if (b) b.disabled = true; });
-  const btn = document.getElementById("ai_file_go"); btn.disabled = true;
-  const prog = document.getElementById("ai_prog"), msg = document.getElementById("ai_msg");
-  prog.style.display = "block"; msg.textContent = "上传并解析文件…";
+  _lockGenerate(true);
+  const prog = document.getElementById("ai_prog");
+  const bar = document.getElementById("ai_bar");
+  const msg = document.getElementById("ai_msg");
+  prog.style.display = "block";
+  bar.style.width = "0%";
+  msg.textContent = "⏳ 上传并解析文件…";
   try {
     const fd = new FormData();
     fd.append("bank_id", S.bank);
@@ -504,81 +642,72 @@ async function runAIFile() {
     fd.append("file", f);
     const { task_id } = await api("/ai/generate-from-file", { form: fd });
     await pollGenerate(task_id);
-  } catch (e) { toast(e.message, true); msg.textContent = "✕ " + e.message; }
-  finally { allAiBtns.forEach(b => { if (b) b.disabled = false; }); }
-}
-
-/* ---------------- topic placeholder 生成 ---------------- */
-function getTopicPlaceholder(bankTitle) {
-  const map = {
-    "英语": "如：阅读理解技巧、完形填空、写作常用句型",
-    "四级": "如：词汇辨析、阅读理解、翻译技巧",
-    "六级": "如：长篇阅读、听力理解、写作论证结构",
-    "雅思": "如：Task 2 议论文写作、阅读匹配题、听力填空",
-    "托福": "如：综合写作、阅读细节题、学术词汇",
-    "网络安全": "如：SQL 注入原理与防御、XSS 跨站脚本攻击、密码学基础",
-    "CTF": "如：Web 漏洞利用、逆向工程基础、密码学题型",
-    "软考": "如：计算机网络基础、数据结构与算法、操作系统原理",
-    "CISP": "如：信息安全管理、风险评估方法、密码技术应用",
-    "医": "如：内科疾病诊断、药物作用机制、临床检验解读",
-    "护士": "如：基础护理操作、药物护理、护患沟通",
-    "建筑": "如：建筑结构力学、施工质量控制、工程造价管理",
-    "注册建筑": "如：建筑设计原理、建筑材料性能、规范强制条文",
-    "会计": "如：资产负债表编制、会计分录、税务处理",
-    "法律": "如：合同法基本原则、侵权责任认定、诉讼程序",
-    "驾": "如：交通标志识别、行车安全规范、违规处罚",
-    "教师": "如：教育学基本理论、课堂管理策略、教学设计方法",
-  };
-  for (const [key, hint] of Object.entries(map)) {
-    if (bankTitle.includes(key)) return hint;
+  } catch(e) {
+    toast(e.message, true);
+    const msgEl = document.getElementById("ai_msg");
+    if (msgEl) msgEl.textContent = "✕ " + e.message;
+  } finally {
+    _lockGenerate(false);
   }
-  return `如：${bankTitle}核心概念、重点知识点、常见考点`;
 }
 
-/* ---------------- AI 推荐知识点 ---------------- */
+/* ---------------- 知识点 placeholder 映射 ---------------- */
+function getTopicPlaceholder(title) {
+  const map = [
+    [["英语四级","CET4","四级"], "如：阅读理解技巧、完形填空、翻译技巧"],
+    [["英语六级","CET6","六级"], "如：长篇阅读、听力理解、写作论证结构"],
+    [["雅思","IELTS"], "如：Task 2 议论文写作、阅读匹配题、听力填空"],
+    [["托福","TOEFL"], "如：综合写作、阅读细节题、学术词汇"],
+    [["网络安全","信息安全","安全"], "如：SQL 注入原理与防御、XSS 攻击、密码学基础"],
+    [["CTF"], "如：Web 漏洞利用、逆向工程基础、密码学题型"],
+    [["软考"], "如：计算机网络基础、数据结构与算法、操作系统原理"],
+    [["CISP","CISSP"], "如：信息安全管理、风险评估方法、密码技术应用"],
+    [["医","执业","护士","药师"], "如：内科疾病诊断、药物作用机制、临床检验解读"],
+    [["建筑","一建","二建","注册建筑"], "如：建筑结构力学、施工质量控制、工程造价管理"],
+    [["会计","CPA","税务"], "如：资产负债表编制、会计分录、税务处理"],
+    [["法律","法考","司法"], "如：合同法基本原则、侵权责任认定、诉讼程序"],
+    [["驾","驾照","驾驶"], "如：交通标志识别、行车安全规范、违规处罚规定"],
+    [["教师","教资"], "如：教育学基本理论、课堂管理策略、教学设计方法"],
+    [["习近平","党政","思政","政治"], "如：新时代中国特色社会主义、五大发展理念、党的建设"],
+  ];
+  for (const [keys, hint] of map) {
+    if (keys.some(k => title.includes(k))) return hint;
+  }
+  return `如：${title}核心概念、重点考点、常见题型`;
+}
+
+/* ---------------- AI 推荐知识点（多选） ---------------- */
+let _selectedTopics = new Set();
+
 async function suggestTopics(bankTitle) {
   const btn = document.getElementById("ai_suggest");
   const wrap = document.getElementById("ai_topics_wrap");
   const list = document.getElementById("ai_topics_list");
-  btn.disabled = true;
-  btn.textContent = "推荐中…";
-  wrap.style.display = "none";
+  btn.disabled = true; btn.textContent = "推荐中…";
+  _selectedTopics.clear();
   try {
     const res = await api("/ai/suggest-topics", { body: { bank_title: bankTitle } });
     list.innerHTML = res.topics.map(t => `
-      <button class="btn ghost sm topic-tag" style="font-size:12px;padding:4px 10px"
-        onclick="document.getElementById('ai_topic').value='${t.replace(/'/g,"\\'")}';
-                document.querySelectorAll('.topic-tag').forEach(x=>x.classList.remove('on'));
-                this.classList.add('on')">
-        ${esc(t)}
-      </button>`).join("");
+      <button class="topic-tag" data-topic="${esc(t)}">${esc(t)}</button>`).join("");
     wrap.style.display = "block";
-    toast("已推荐 " + res.topics.length + " 个知识点");
-  } catch(e) {
-    toast("推荐失败：" + e.message, true);
-  } finally {
-    btn.disabled = false;
-    btn.textContent = "✨ 推荐";
-  }
-}
-
-async function runAI() {
-  const topic = document.getElementById("ai_topic").value.trim();
-  if (!topic) return toast("请填写主题", true);
-  // 禁用两个出题按钮，防止重复提交
-  const allAiBtns = [document.getElementById("ai_go"), document.getElementById("ai_file_go")];
-  allAiBtns.forEach(b => { if (b) b.disabled = true; });
-  const btn = document.getElementById("ai_go"); btn.disabled = true;
-  const prog = document.getElementById("ai_prog"), bar = document.getElementById("ai_bar"), msg = document.getElementById("ai_msg");
-  prog.style.display = "block"; msg.textContent = "提交任务…";
-  try {
-    const { task_id } = await api("/ai/generate", { body: {
-      bank_id: S.bank, topic, difficulty: document.getElementById("ai_diff").value,
-      count: Number(document.getElementById("ai_count").value), auto_approve: document.getElementById("ai_auto").checked,
-    }});
-    await pollGenerate(task_id);
-  } catch (e) { toast(e.message, true); msg.textContent = "✕ " + e.message; }
-  finally { allAiBtns.forEach(b => { if (b) b.disabled = false; }); }
+    list.querySelectorAll(".topic-tag").forEach(tag => {
+      tag.onclick = () => {
+        const topic = tag.dataset.topic;
+        if (_selectedTopics.has(topic)) {
+          _selectedTopics.delete(topic);
+          tag.classList.remove("on");
+        } else {
+          _selectedTopics.add(topic);
+          tag.classList.add("on");
+        }
+        // 把所有选中的 tag 写入输入框，用顿号分隔
+        const input = document.getElementById("ai_topic");
+        input.value = [..._selectedTopics].join("、");
+      };
+    });
+    toast("已推荐 " + res.topics.length + " 个知识点，可多选");
+  } catch(e) { toast("推荐失败：" + e.message, true); }
+  finally { btn.disabled = false; btn.textContent = "✨ AI 推荐"; }
 }
 
 /* ---------------- 答题 ---------------- */
@@ -640,10 +769,10 @@ async function viewQuiz() {
   if (!Q) return go("banks");
   if (Q.i >= Q.qs.length) return quizSummary();
   const q = Q.qs[Q.i];
-  shell("答题 · " + esc(Q.title), `${Q.session.mode.toUpperCase()}`, `
+  shell("答题 · " + esc(Q.title), L("mode", Q.session.mode), `
     <div class="card sheet">
       <div class="qmeta"><span class="n">第 ${String(Q.i+1).padStart(2,"0")} / ${String(Q.qs.length).padStart(2,"0")} 题</span>
-        <span style="display:flex;gap:10px;align-items:center">${Q.deadline ? '<span class="pill" id="timer" style="font-family:var(--mono)">--:--</span>' : ""}<span class="pill">${q.difficulty}</span></span></div>
+        <span style="display:flex;gap:10px;align-items:center">${Q.deadline ? '<span class="pill" id="timer" style="font-family:var(--mono)">--:--</span>' : ""}<span class="pill">${L("difficulty", q.difficulty)}</span></span></div>
       <div class="progress"><i style="width:${((Q.i+1)/Q.qs.length)*100}%"></i></div>
       <p class="stem">${esc(q.content)}</p>
       <div id="opts">
