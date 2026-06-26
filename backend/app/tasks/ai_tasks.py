@@ -75,17 +75,22 @@ async def _persist_questions(
 
 
 async def _run_generate(task_id, bank_id, topic, difficulty, count, auto_approve, user_id):
+    # 阶段一：AI 调用中
     _set_state(
         task_id,
         status="processing",
+        stage="ai_thinking",
         progress=0,
         generated=0,
         total=count,
         questions=[],
     )
     items = await ai_service.generate_questions(topic, difficulty, count)
+
+    # 阶段二：入库中（用实际返回数量，可能和 count 不等）
+    _set_state(task_id, stage="saving", progress=50, generated=0, total=len(items))
     saved = await _persist_questions(bank_id, items, difficulty, auto_approve, user_id, task_id)
-    _set_state(task_id, status="done", progress=100, generated=len(saved), questions=saved)
+    _set_state(task_id, status="done", stage="done", progress=100, generated=len(saved), questions=saved)
 
 
 @celery.task(name="generate_questions_task")
@@ -125,7 +130,8 @@ async def _update_file_task(file_task_id: str, **fields):
 async def _run_from_file(
     task_id, bank_id, file_task_id, difficulty, count, auto_approve, user_id
 ):
-    _set_state(task_id, status="processing", progress=0, generated=0, total=count, questions=[])
+    # 阶段零：解析文件
+    _set_state(task_id, status="processing", stage="parsing_file", progress=0, generated=0, total=count, questions=[])
 
     file_path, file_type = await _load_file_task(file_task_id)
     text = file_service.parse_file(file_path, file_type)
@@ -133,14 +139,20 @@ async def _run_from_file(
         file_task_id, status=FileTaskStatus.processing, parsed_content=text
     )
 
+    # 阶段一：AI 调用中
+    _set_state(task_id, stage="ai_thinking", progress=20)
+
     topic = "基于上传文档的知识点"
     items = await ai_service.generate_questions(topic, difficulty, count, extra_context=text)
+
+    # 阶段二：入库中
+    _set_state(task_id, stage="saving", progress=60, generated=0, total=len(items))
     saved = await _persist_questions(bank_id, items, difficulty, auto_approve, user_id, task_id)
 
     await _update_file_task(
         file_task_id, status=FileTaskStatus.done, questions_generated=len(saved)
     )
-    _set_state(task_id, status="done", progress=100, generated=len(saved), questions=saved)
+    _set_state(task_id, status="done", stage="done", progress=100, generated=len(saved), questions=saved)
 
 
 @celery.task(name="generate_from_file_task")

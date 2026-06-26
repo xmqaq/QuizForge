@@ -110,7 +110,7 @@
   .qmeta { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
   .qmeta .n { font-family: var(--mono); font-size: 13px; color: var(--muted); letter-spacing: 1px; }
   .progress { height: 6px; background: var(--line); border-radius: 99px; overflow: hidden; margin-bottom: 22px; }
-  .progress i { display: block; height: 100%; background: var(--accent); border-radius: 99px; transition: width .3s; }
+  .progress i { display: block; height: 100%; background: var(--accent); border-radius: 99px; transition: width .6s ease-out; }
   .stem { font-size: 18px; line-height: 1.55; margin: 0 0 22px; font-weight: 500; }
   .opt { display: flex; align-items: center; gap: 14px; padding: 13px 15px; border: 1.5px solid var(--line);
     border-radius: 11px; margin-bottom: 10px; background: #fff; cursor: pointer; transition: border-color .12s, background .12s; }
@@ -519,7 +519,7 @@ async function viewBankDetail() {
 
        <!-- 共用进度区 -->
        <div id="ai_prog" style="display:none;margin-top:16px">
-         <div class="progress" style="margin-bottom:8px"><i id="ai_bar" style="width:0;transition:width .4s"></i></div>
+         <div class="progress" style="margin-bottom:8px"><i id="ai_bar" style="width:0"></i></div>
          <div id="ai_msg" style="font-size:13px;color:var(--muted)"></div>
        </div>
      </div>
@@ -612,48 +612,71 @@ async function viewBankDetail() {
 
 const STATUS_LABEL = { queued:"排队等待中", processing:"生成中", done:"已完成", failed:"生成失败" };
 
-async function pollGenerate(task_id) {
-  const bar = document.getElementById("ai_bar");
-  const msg = document.getElementById("ai_msg");
-  let fakeProgress = 0;
+const STAGE_CONFIG = {
+  parsing_file: { text: () => "📄 正在解析文档内容…", useRealCount: false, progressCap: 20 },
+  ai_thinking:  { text: (total) => `⚡ AI 正在生成 ${total} 道题目，请稍候…`, useRealCount: false, progressCap: 60 },
+  saving:       { text: (total, generated) => `💾 正在保存… 已完成 ${generated} / ${total} 题`, useRealCount: true, progressCap: 99 },
+};
 
-  // 在 AI 调用阶段（generated=0 时）用伪进度动画让进度条动起来
+async function pollGenerate(task_id) {
+  let fakeProgress = 0;
+  let currentCap = 30; // 当前伪进度上限，随 stage 更新
+
+  // 伪进度动画：AI 思考阶段让进度条平滑爬升，不卡死
   const fakeTick = setInterval(() => {
     const barEl = document.getElementById("ai_bar");
     if (!barEl) { clearInterval(fakeTick); return; }
-    // 伪进度最多涨到 30%，等真实进度追上后停止
-    if (fakeProgress < 30) {
-      fakeProgress += (30 - fakeProgress) * 0.08; // 缓动，越来越慢
-      barEl.style.width = fakeProgress.toFixed(1) + "%";
+    if (fakeProgress < currentCap) {
+      fakeProgress += (currentCap - fakeProgress) * 0.06; // 缓动：越接近上限越慢
+      barEl.style.width = Math.min(fakeProgress, currentCap).toFixed(1) + "%";
     }
-  }, 300);
+  }, 250);
+
+  const setBar = (pct) => {
+    fakeProgress = Math.max(fakeProgress, pct);
+    const barEl = document.getElementById("ai_bar");
+    if (barEl) barEl.style.width = fakeProgress.toFixed(1) + "%";
+  };
+  const setMsg = (text) => {
+    const msgEl = document.getElementById("ai_msg");
+    if (msgEl) msgEl.textContent = text;
+  };
 
   try {
-    for (let i = 0; i < 60; i++) {
+    setMsg("⏳ 提交任务，等待队列…");
+
+    for (let i = 0; i < 80; i++) {
       await new Promise(r => setTimeout(r, 1500));
       let st;
       try { st = await api("/ai/task/" + task_id); } catch { continue; }
 
-      const statusText = STATUS_LABEL[st.status] || st.status;
       const generated = st.generated || 0;
       const total = st.total || 0;
+      const stage = st.stage || (st.status === "processing" ? "ai_thinking" : st.status);
 
       if (st.status === "queued") {
-        msg.textContent = "⏳ 排队等待中…";
+        setMsg("⏳ 排队等待中，即将开始…");
         continue;
       }
 
       if (st.status === "processing") {
-        // 真实进度：已入库题目 / 总数
-        const realPct = total > 0 ? (generated / total) * 100 : 0;
-        // 取伪进度和真实进度的最大值，保证进度条不回退
-        const displayPct = Math.max(fakeProgress, realPct);
-        fakeProgress = displayPct; // 同步伪进度，防止回退
-        const barEl = document.getElementById("ai_bar");
-        if (barEl) barEl.style.width = displayPct.toFixed(1) + "%";
-        msg.textContent = total > 0
-          ? `⚡ 生成中… 已完成 ${generated} / ${total} 题`
-          : "⚡ AI 正在生成题目，请稍候…";
+        const cfg = STAGE_CONFIG[stage];
+        if (cfg) {
+          currentCap = cfg.progressCap;
+          if (cfg.useRealCount && total > 0) {
+            // 入库阶段：真实比例映射到 50%~99%
+            setBar(50 + (generated / total) * 49);
+            setMsg(cfg.text(total, generated));
+          } else {
+            // AI 思考 / 文件解析阶段：只更新上限，让伪动画自然爬升
+            setMsg(cfg.text(total, generated));
+          }
+        } else {
+          // 兜底：没有 stage 字段的旧任务
+          setMsg(total > 0
+            ? `⚡ 生成中… 已完成 ${generated} / ${total} 题`
+            : "⚡ AI 正在生成题目，请稍候…");
+        }
         continue;
       }
 
@@ -661,10 +684,8 @@ async function pollGenerate(task_id) {
         clearInterval(fakeTick);
         const barEl = document.getElementById("ai_bar");
         if (barEl) barEl.style.width = "100%";
-        const msgEl = document.getElementById("ai_msg");
-        if (msgEl) msgEl.textContent = `✓ 生成完成，共 ${generated} 道题`;
+        setMsg(`✓ 生成完成，共 ${generated} 道题`);
         toast(`✓ 成功生成 ${generated} 道题目`);
-        // 延迟 800ms 再刷新，让用户看到 100% 完成状态
         setTimeout(() => viewBankDetail(), 800);
         return;
       }
@@ -676,9 +697,11 @@ async function pollGenerate(task_id) {
     }
     // 超时但任务可能仍在后台运行
     clearInterval(fakeTick);
-    toast("生成耗时较长，题目将在后台继续生成，请稍后刷新题库查看", false);
+    setMsg("⏱ 生成耗时较长，题目在后台继续生成，请稍后刷新查看");
+    toast("生成耗时较长，请稍后刷新题库查看", false);
   } catch(e) {
     clearInterval(fakeTick);
+    setMsg("✕ " + e.message);
     throw e;
   }
 }
