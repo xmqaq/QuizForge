@@ -8,10 +8,15 @@ client = AsyncOpenAI(api_key=settings.DEEPSEEK_API_KEY, base_url=settings.DEEPSE
 
 PROMPT_TEMPLATE = """你是一个专业的题库出题专家，请根据以下要求生成选择题。
 
-知识领域：{topic}
+核心知识点（必须覆盖，可自然延伸）：{topic}
 难度级别：{difficulty}（easy=基础概念，medium=理解应用，hard=综合分析）
 生成数量：{count} 道
 {extra_context}
+
+出题策略：
+- 以上述知识点为主干方向，结合实际考试题型自然延伸相关考点
+- 不要机械地按知识点平均分配题目数量，以整体覆盖面和质量为准
+- 不同知识点之间可以有交叉融合，体现综合考察
 
 严格按照以下 JSON 格式输出，不要有任何其他文字：
 {{
