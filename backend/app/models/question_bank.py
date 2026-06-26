@@ -31,6 +31,7 @@ class QuestionBank(Base):
     id = Column(Uuid, primary_key=True, default=uuid.uuid4)
     title = Column(String(200), nullable=False)
     description = Column(Text, nullable=True)
+    industry = Column(String(32), nullable=True)
     category_id = Column(Integer, ForeignKey("category.id"), nullable=True)
     created_by = Column(Uuid, ForeignKey("user.id"), nullable=True)
     is_public = Column(Boolean, default=True, nullable=False)

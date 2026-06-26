@@ -9,6 +9,7 @@ from app.models.question_bank import BankStatus
 class QuestionBankCreate(BaseModel):
     title: str
     description: str | None = None
+    industry: str | None = None
     category_id: int | None = None
     is_public: bool = True
     status: BankStatus = BankStatus.draft
@@ -17,6 +18,7 @@ class QuestionBankCreate(BaseModel):
 class QuestionBankUpdate(BaseModel):
     title: str | None = None
     description: str | None = None
+    industry: str | None = None
     category_id: int | None = None
     is_public: bool | None = None
     status: BankStatus | None = None
@@ -28,6 +30,7 @@ class QuestionBankResponse(BaseModel):
     id: uuid.UUID
     title: str
     description: str | None
+    industry: str | None
     category_id: int | None
     created_by: uuid.UUID | None
     is_public: bool
