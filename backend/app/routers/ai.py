@@ -19,7 +19,14 @@ from app.database import get_db
 from app.dependencies import get_current_user
 from app.models.file_task import FileTask, FileType
 from app.models.user import User
-from app.schemas.ai import GenerateFromFileResponse, GenerateRequest, GenerateResponse
+from app.schemas.ai import (
+    GenerateFromFileResponse,
+    GenerateRequest,
+    GenerateResponse,
+    SuggestTopicsRequest,
+    SuggestTopicsResponse,
+)
+from app.services import ai_service
 from app.tasks.ai_tasks import generate_from_file_task, generate_questions_task
 
 router = APIRouter()
@@ -106,6 +113,23 @@ async def generate_from_file(
         str(current_user.id),
     )
     return GenerateFromFileResponse(task_id=task_id, file_task_id=str(file_task.id))
+
+
+@router.post(
+    "/suggest-topics",
+    response_model=SuggestTopicsResponse,
+    summary="AI 推荐知识点主题",
+)
+async def suggest_topics(
+    req: SuggestTopicsRequest,
+    current_user: User = Depends(get_current_user),
+):
+    """根据题库标题，让 AI 推荐 6 个适合出题的知识点主题，供用户选择填入。"""
+    try:
+        topics = await ai_service.suggest_topics(req.bank_title)
+        return SuggestTopicsResponse(topics=topics)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/task/{task_id}", summary="查询出题任务状态")

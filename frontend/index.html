@@ -74,6 +74,7 @@
   .btn.ghost { background: var(--card); color: var(--ink); border: 1px solid var(--line); }
   .btn.ghost:hover { border-color: var(--ink); filter: none; }
   .btn.sm { padding: 7px 12px; font-size: 13px; }
+  .topic-tag.on { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
   label.f { display: block; font-size: 12px; font-weight: 600; color: var(--muted); margin: 0 0 6px; letter-spacing: .2px; }
   .in { width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 9px; background: #fff; color: var(--ink); }
   .in:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
@@ -358,33 +359,93 @@ async function viewBankDetail() {
        <div style="flex:none"><button class="btn" id="start" ${b.question_count?"":"disabled"}>开始答题</button>
        <button class="btn ghost" id="back">← 返回题库</button></div></div>
      <div class="card" style="margin-bottom:24px">
-       <div style="font-weight:700;margin-bottom:14px">⚡ AI 出题</div>
-       <div class="row">
-         <div style="flex:3"><label class="f">知识点 / 主题</label><input class="in" id="ai_topic" placeholder="如：SQL 注入攻击原理与防御"></div>
-         <div><label class="f">难度</label><select class="in" id="ai_diff"><option value="easy">基础</option><option value="medium" selected>进阶</option><option value="hard">综合</option></select></div>
-         <div><label class="f">数量</label><input class="in" id="ai_count" type="number" value="5" min="1" max="20"></div>
-       </div>
-       <div class="row" style="margin-top:12px;align-items:center">
-         <label style="flex:none;font-size:13px;color:var(--muted)"><input type="checkbox" id="ai_auto" checked> 自动审核通过</label>
-         <div style="flex:1"></div>
-         <div style="flex:none"><button class="btn" id="ai_go">生成题目</button></div>
-       </div>
-       <div style="border-top:1px dashed var(--line);margin:16px 0 0;padding-top:14px">
-         <label class="f">或：上传文档出题 <span class="muted" style="font-weight:400">(pdf / docx / txt / md，复用上面的难度与数量)</span></label>
-         <div class="row" style="align-items:center">
-           <input class="in" id="ai_file" type="file" accept=".pdf,.docx,.txt,.md" style="flex:3">
-           <div style="flex:none"><button class="btn ghost" id="ai_file_go">上传并出题</button></div>
+
+       <!-- 区块一：按主题 AI 出题 -->
+       <div style="font-weight:700;margin-bottom:4px;font-size:15px">⚡ AI 出题</div>
+       <div style="font-size:12px;color:var(--muted);margin-bottom:14px">输入知识点主题，AI 直接生成选择题</div>
+
+       <div class="row" style="align-items:flex-end">
+         <div style="flex:3">
+           <label class="f">知识点 / 主题</label>
+           <div style="display:flex;gap:6px">
+             <input class="in" id="ai_topic" placeholder="${getTopicPlaceholder(b.title)}" style="flex:1">
+             <button class="btn ghost sm" id="ai_suggest" title="AI 推荐知识点" style="flex:none;white-space:nowrap">✨ 推荐</button>
+           </div>
+         </div>
+         <div style="min-width:90px">
+           <label class="f">难度</label>
+           <select class="in" id="ai_diff">
+             <option value="easy">基础</option>
+             <option value="medium" selected>进阶</option>
+             <option value="hard">综合</option>
+           </select>
+         </div>
+         <div style="min-width:80px">
+           <label class="f">数量</label>
+           <input class="in" id="ai_count" type="number" value="5" min="1" max="50">
          </div>
        </div>
+
+       <!-- AI 推荐知识点 tag 区域（默认隐藏） -->
+       <div id="ai_topics_wrap" style="display:none;margin-top:10px">
+         <div style="font-size:12px;color:var(--muted);margin-bottom:6px">点击选择，或手动输入：</div>
+         <div id="ai_topics_list" style="display:flex;gap:6px;flex-wrap:wrap"></div>
+       </div>
+
+       <div class="row" style="margin-top:12px;align-items:center">
+         <label style="flex:none;font-size:13px;color:var(--muted)">
+           <input type="checkbox" id="ai_auto" checked> 自动审核通过
+         </label>
+         <div style="flex:1"></div>
+         <div style="flex:none">
+           <button class="btn" id="ai_go">生成题目</button>
+         </div>
+       </div>
+
+       <!-- 分隔线 -->
+       <div style="border-top:1px dashed var(--line);margin:20px 0"></div>
+
+       <!-- 区块二：上传知识文档出题（独立参数） -->
+       <div style="font-weight:700;margin-bottom:4px;font-size:15px">📄 上传知识文档出题</div>
+       <div style="font-size:12px;color:var(--muted);margin-bottom:14px">
+         AI 将读取文档内容作为知识来源，据此生成选择题（支持 PDF / Word / TXT / MD）
+       </div>
+
+       <div style="margin-bottom:10px">
+         <input class="in" id="ai_file" type="file" accept=".pdf,.docx,.txt,.md">
+       </div>
+
+       <div class="row" style="align-items:flex-end">
+         <div style="min-width:90px">
+           <label class="f">难度</label>
+           <select class="in" id="ai_file_diff">
+             <option value="easy">基础</option>
+             <option value="medium" selected>进阶</option>
+             <option value="hard">综合</option>
+           </select>
+         </div>
+         <div style="min-width:80px">
+           <label class="f">生成数量</label>
+           <input class="in" id="ai_file_count" type="number" value="10" min="1" max="50">
+         </div>
+         <div style="flex:none">
+           <label class="f" style="visibility:hidden">操作</label>
+           <button class="btn ghost" id="ai_file_go">上传并生成题目</button>
+         </div>
+       </div>
+
+       <!-- 共用进度条（两种模式共享） -->
        <div id="ai_prog" style="display:none;margin-top:16px">
          <div class="progress"><i id="ai_bar" style="width:0"></i></div>
          <div class="muted" id="ai_msg" style="font-size:13px;margin-top:8px"></div>
        </div>
+
      </div>
      <div>${qlist}</div>`);
   document.getElementById("back").onclick = () => go("banks");
   document.getElementById("start").onclick = () => openQuizConfig(b.title);
   document.getElementById("ai_go").onclick = runAI;
+  document.getElementById("ai_suggest").onclick = () => suggestTopics(b.title);
   document.getElementById("ai_file_go").onclick = runAIFile;
 }
 
@@ -437,14 +498,68 @@ async function runAIFile() {
   try {
     const fd = new FormData();
     fd.append("bank_id", S.bank);
-    fd.append("difficulty", document.getElementById("ai_diff").value);
-    fd.append("count", document.getElementById("ai_count").value);
+    fd.append("difficulty", document.getElementById("ai_file_diff").value);
+    fd.append("count", document.getElementById("ai_file_count").value);
     fd.append("auto_approve", document.getElementById("ai_auto").checked);
     fd.append("file", f);
     const { task_id } = await api("/ai/generate-from-file", { form: fd });
     await pollGenerate(task_id);
   } catch (e) { toast(e.message, true); msg.textContent = "✕ " + e.message; }
   finally { allAiBtns.forEach(b => { if (b) b.disabled = false; }); }
+}
+
+/* ---------------- topic placeholder 生成 ---------------- */
+function getTopicPlaceholder(bankTitle) {
+  const map = {
+    "英语": "如：阅读理解技巧、完形填空、写作常用句型",
+    "四级": "如：词汇辨析、阅读理解、翻译技巧",
+    "六级": "如：长篇阅读、听力理解、写作论证结构",
+    "雅思": "如：Task 2 议论文写作、阅读匹配题、听力填空",
+    "托福": "如：综合写作、阅读细节题、学术词汇",
+    "网络安全": "如：SQL 注入原理与防御、XSS 跨站脚本攻击、密码学基础",
+    "CTF": "如：Web 漏洞利用、逆向工程基础、密码学题型",
+    "软考": "如：计算机网络基础、数据结构与算法、操作系统原理",
+    "CISP": "如：信息安全管理、风险评估方法、密码技术应用",
+    "医": "如：内科疾病诊断、药物作用机制、临床检验解读",
+    "护士": "如：基础护理操作、药物护理、护患沟通",
+    "建筑": "如：建筑结构力学、施工质量控制、工程造价管理",
+    "注册建筑": "如：建筑设计原理、建筑材料性能、规范强制条文",
+    "会计": "如：资产负债表编制、会计分录、税务处理",
+    "法律": "如：合同法基本原则、侵权责任认定、诉讼程序",
+    "驾": "如：交通标志识别、行车安全规范、违规处罚",
+    "教师": "如：教育学基本理论、课堂管理策略、教学设计方法",
+  };
+  for (const [key, hint] of Object.entries(map)) {
+    if (bankTitle.includes(key)) return hint;
+  }
+  return `如：${bankTitle}核心概念、重点知识点、常见考点`;
+}
+
+/* ---------------- AI 推荐知识点 ---------------- */
+async function suggestTopics(bankTitle) {
+  const btn = document.getElementById("ai_suggest");
+  const wrap = document.getElementById("ai_topics_wrap");
+  const list = document.getElementById("ai_topics_list");
+  btn.disabled = true;
+  btn.textContent = "推荐中…";
+  wrap.style.display = "none";
+  try {
+    const res = await api("/ai/suggest-topics", { body: { bank_title: bankTitle } });
+    list.innerHTML = res.topics.map(t => `
+      <button class="btn ghost sm topic-tag" style="font-size:12px;padding:4px 10px"
+        onclick="document.getElementById('ai_topic').value='${t.replace(/'/g,"\\'")}';
+                document.querySelectorAll('.topic-tag').forEach(x=>x.classList.remove('on'));
+                this.classList.add('on')">
+        ${esc(t)}
+      </button>`).join("");
+    wrap.style.display = "block";
+    toast("已推荐 " + res.topics.length + " 个知识点");
+  } catch(e) {
+    toast("推荐失败：" + e.message, true);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "✨ 推荐";
+  }
 }
 
 async function runAI() {
