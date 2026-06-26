@@ -75,7 +75,19 @@ alembic revision --autogenerate -m "init"   # 需数据库可连接
 alembic upgrade head
 ```
 
-## 验证
+## 测试
+
+单元 + API 集成测试，用内存 SQLite 运行，**无需 Postgres/Redis/Celery**：
+
+```bash
+cd backend
+pip install -r requirements-dev.txt
+pytest
+```
+
+覆盖：AI 返回解析、文件截断、密码/JWT、答题判分、错题入库、随机取题一致性、权限校验。
+
+## 端到端验证（需完整环境）
 
 后端 + postgres + redis + celery 全部就绪并配置好 `DEEPSEEK_API_KEY` 后：
 

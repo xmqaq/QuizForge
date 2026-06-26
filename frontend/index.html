@@ -251,7 +251,7 @@ function shell(title, sub, inner) {
   root.querySelectorAll(".nav").forEach(b => b.onclick = () => go(b.dataset.v));
   document.getElementById("out").onclick = () => { localStorage.removeItem("qf_token"); S = { token: null, view: "banks", bank: null }; renderAuth(); };
 }
-function go(view) { S.view = view; S.bank = null; route(); }
+function go(view) { clearTimer(); S.view = view; S.bank = null; route(); }
 
 async function route() {
   try {
@@ -344,7 +344,7 @@ async function viewBankDetail() {
      </div>
      <div>${qlist}</div>`);
   document.getElementById("back").onclick = () => go("banks");
-  document.getElementById("start").onclick = () => startQuiz(S.bank, b.title);
+  document.getElementById("start").onclick = () => openQuizConfig(b.title);
   document.getElementById("ai_go").onclick = runAI;
   document.getElementById("ai_file_go").onclick = runAIFile;
 }
@@ -401,13 +401,51 @@ async function runAI() {
 
 /* ---------------- 答题 ---------------- */
 let Q = null; // active quiz state
-async function startQuiz(bankId, title) {
-  const mode = "random";
-  const sess = await api("/quiz/sessions", { body: { bank_id: bankId, mode } });
+function openQuizConfig(title) {
+  const body = document.getElementById("body");
+  if (document.getElementById("qcfg")) return;
+  body.insertAdjacentHTML("afterbegin", `
+    <div class="card" id="qcfg" style="margin-bottom:18px">
+      <div style="font-weight:700;margin-bottom:14px">开始答题</div>
+      <div class="row">
+        <div><label class="f">模式</label>
+          <select class="in" id="qc_mode">
+            <option value="random">随机</option>
+            <option value="sequential">顺序</option>
+            <option value="wrong_only">只做错题</option>
+            <option value="simulation">模拟考试（限时）</option>
+          </select></div>
+        <div><label class="f">题量（留空=全部）</label><input class="in" id="qc_count" type="number" min="1" placeholder="全部"></div>
+        <div id="qc_timewrap" style="display:none"><label class="f">时长（分钟）</label><input class="in" id="qc_time" type="number" min="1" value="10"></div>
+      </div>
+      <div class="row" style="margin-top:12px;justify-content:flex-end"><div style="flex:none">
+        <button class="btn" id="qc_go">开始</button>
+        <button class="btn ghost" id="qc_cancel">取消</button></div></div>
+    </div>`);
+  const modeSel = document.getElementById("qc_mode");
+  modeSel.onchange = () => {
+    document.getElementById("qc_timewrap").style.display = modeSel.value === "simulation" ? "block" : "none";
+  };
+  document.getElementById("qc_cancel").onclick = () => document.getElementById("qcfg").remove();
+  document.getElementById("qc_go").onclick = () => {
+    const mode = modeSel.value;
+    const count = document.getElementById("qc_count").value;
+    const limit = mode === "simulation" ? Number(document.getElementById("qc_time").value) * 60 : null;
+    startQuiz(S.bank, title, mode, count ? Number(count) : null, limit);
+  };
+}
+
+async function startQuiz(bankId, title, mode = "random", total = null, limitSec = null) {
+  let sess;
+  try {
+    sess = await api("/quiz/sessions", { body: { bank_id: bankId, mode, total_questions: total, time_limit_seconds: limitSec } });
+  } catch (e) { return toast(e.message, true); }
   const qs = await api(`/quiz/sessions/${sess.id}/questions`);
-  Q = { session: sess, title, qs, i: 0, locked: false, correct: 0 };
+  Q = { session: sess, title, qs, i: 0, locked: false, correct: 0,
+        deadline: limitSec ? Date.now() + limitSec * 1000 : null, timer: null };
   S.view = "quiz"; route();
 }
+function clearTimer() { if (Q && Q.timer) { clearInterval(Q.timer); Q.timer = null; } }
 async function viewQuiz() {
   if (!Q) return go("banks");
   if (Q.i >= Q.qs.length) return quizSummary();
@@ -415,7 +453,7 @@ async function viewQuiz() {
   shell("答题 · " + esc(Q.title), `${Q.session.mode.toUpperCase()}`, `
     <div class="card sheet">
       <div class="qmeta"><span class="n">第 ${String(Q.i+1).padStart(2,"0")} / ${String(Q.qs.length).padStart(2,"0")} 题</span>
-        <span class="pill">${q.difficulty}</span></div>
+        <span style="display:flex;gap:10px;align-items:center">${Q.deadline ? '<span class="pill" id="timer" style="font-family:var(--mono)">--:--</span>' : ""}<span class="pill">${q.difficulty}</span></span></div>
       <div class="progress"><i style="width:${(Q.i/Q.qs.length)*100}%"></i></div>
       <p class="stem">${esc(q.content)}</p>
       <div id="opts">
@@ -432,6 +470,19 @@ async function viewQuiz() {
     document.getElementById("after").innerHTML = `<div class="row" style="justify-content:flex-end;margin-top:16px"><div style="flex:none"><button class="btn" id="submit">提交答案</button></div></div>`;
     document.getElementById("submit").onclick = () => submitAnswer(q, pick);
   });
+  clearTimer();
+  if (Q.deadline) {
+    const tick = () => {
+      const rem = Math.max(0, Math.round((Q.deadline - Date.now()) / 1000));
+      const el = document.getElementById("timer");
+      if (el) {
+        el.textContent = `⏱ ${String(Math.floor(rem / 60)).padStart(2, "0")}:${String(rem % 60).padStart(2, "0")}`;
+        el.style.color = rem <= 30 ? "var(--wrong)" : "";
+      }
+      if (rem <= 0) { clearTimer(); toast("时间到，自动交卷"); Q.i = Q.qs.length; route(); }
+    };
+    tick(); Q.timer = setInterval(tick, 1000);
+  }
 }
 async function submitAnswer(q, pick) {
   Q.locked = true;
@@ -453,6 +504,7 @@ async function submitAnswer(q, pick) {
   document.getElementById("next").onclick = () => { Q.i++; Q.locked = false; route(); };
 }
 async function quizSummary() {
+  clearTimer();
   const fin = await api(`/quiz/sessions/${Q.session.id}/finish`, { method: "POST" });
   const acc = fin.total_questions ? Math.round((fin.correct_count / fin.answered_count) * 100) : 0;
   shell("成绩单", "SESSION COMPLETE", `
@@ -470,7 +522,7 @@ async function quizSummary() {
 
 /* ---------------- 错题本 ---------------- */
 async function viewWrong() {
-  const list = await api("/wrong");
+  const list = (await api("/wrong")).items;
   const rows = list.length ? list.map(w => `
     <div class="card" style="margin-bottom:10px">
       <div class="meta" style="margin-bottom:8px">

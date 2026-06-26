@@ -29,10 +29,20 @@ _redis = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
 _EXT_MAP = {".pdf": FileType.pdf, ".docx": FileType.word, ".txt": FileType.txt, ".md": FileType.markdown}
 
 
+async def _seed_task(task_id: str, count: int) -> None:
+    """Write an initial state so polling never 404s in the window before the worker starts."""
+    await _redis.set(
+        f"task:{task_id}",
+        json.dumps({"status": "queued", "progress": 0, "generated": 0, "total": count, "questions": []}),
+        ex=86400,
+    )
+
+
 @router.post("/generate", response_model=GenerateResponse, summary="AI 出题（按主题）")
 async def generate(req: GenerateRequest, current_user: User = Depends(get_current_user)):
     """提交一个异步 AI 出题任务，立即返回 task_id，用 /ai/task/{task_id} 查询进度。"""
     task_id = str(uuid.uuid4())
+    await _seed_task(task_id, req.count)
     generate_questions_task.delay(
         task_id,
         str(req.bank_id),
@@ -85,6 +95,7 @@ async def generate_from_file(
     await db.refresh(file_task)
 
     task_id = str(uuid.uuid4())
+    await _seed_task(task_id, count)
     generate_from_file_task.delay(
         task_id,
         str(bank_id),

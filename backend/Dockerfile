@@ -13,6 +13,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
+# 非 root 运行；uploads 目录归该用户可写
+RUN useradd -m appuser && mkdir -p /app/uploads && chown -R appuser /app
+USER appuser
+
 EXPOSE 8000
 
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

@@ -1,6 +1,6 @@
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -68,6 +68,7 @@ async def start_session(
         mode=data.mode,
         total_questions=len(questions),
         time_limit_seconds=data.time_limit_seconds,
+        question_ids=[str(q.id) for q in questions],
     )
     db.add(session)
     await db.commit()
@@ -79,13 +80,15 @@ async def start_session(
 async def list_sessions(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    page: int = Query(1, ge=1),
+    size: int = Query(20, ge=1, le=100),
 ):
+    base = select(QuizSession).where(QuizSession.user_id == current_user.id)
+    total = await db.scalar(select(func.count()).select_from(base.subquery()))
     rows = await db.scalars(
-        select(QuizSession)
-        .where(QuizSession.user_id == current_user.id)
-        .order_by(QuizSession.started_at.desc())
+        base.order_by(QuizSession.started_at.desc()).offset((page - 1) * size).limit(size)
     )
-    return [QuizSessionResponse.model_validate(r) for r in rows]
+    return {"items": [QuizSessionResponse.model_validate(r) for r in rows], "total": total, "page": page, "size": size}
 
 
 @router.get(
@@ -98,9 +101,14 @@ async def session_questions(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """返回本次会话要作答的题目列表（按会话 mode 选题）。"""
+    """返回本次会话固定的题目列表（开始时已选定，顺序一致）。"""
     s = await _get_session(db, session_id, current_user)
-    return await _pick_questions(db, s.bank_id, s.mode, s.user_id, s.total_questions)
+    ids = [uuid.UUID(x) for x in (s.question_ids or [])]
+    if not ids:
+        return []
+    rows = await db.scalars(select(Question).where(Question.id.in_(ids)))
+    by_id = {q.id: q for q in rows}
+    return [by_id[i] for i in ids if i in by_id]
 
 
 @router.post(
@@ -119,9 +127,11 @@ async def submit_answer(
     if s.status != SessionStatus.active:
         raise HTTPException(status_code=400, detail="会话已结束")
 
+    if str(data.question_id) not in (s.question_ids or []):
+        raise HTTPException(status_code=400, detail="该题不属于本次答题")
     q = await db.get(Question, data.question_id)
-    if q is None or q.bank_id != s.bank_id:
-        raise HTTPException(status_code=404, detail="题目不存在或不属于本题库")
+    if q is None:
+        raise HTTPException(status_code=404, detail="题目不存在")
 
     is_correct = data.user_answer == q.correct_answer
     db.add(

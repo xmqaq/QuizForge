@@ -1,7 +1,7 @@
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
@@ -32,21 +32,25 @@ async def list_wrong(
     current_user: User = Depends(get_current_user),
     bank_id: uuid.UUID | None = None,
     is_mastered: bool | None = None,
+    page: int = Query(1, ge=1),
+    size: int = Query(20, ge=1, le=100),
 ):
     """返回当前用户的错题，附带题目详情。可按题库和掌握状态过滤。"""
     stmt = (
         select(WrongQuestion, Question)
         .join(Question, Question.id == WrongQuestion.question_id)
         .where(WrongQuestion.user_id == current_user.id)
-        .order_by(WrongQuestion.last_wrong_at.desc())
     )
     if bank_id is not None:
         stmt = stmt.where(Question.bank_id == bank_id)
     if is_mastered is not None:
         stmt = stmt.where(WrongQuestion.is_mastered.is_(is_mastered))
 
-    rows = await db.execute(stmt)
-    return [
+    total = await db.scalar(select(func.count()).select_from(stmt.subquery()))
+    rows = await db.execute(
+        stmt.order_by(WrongQuestion.last_wrong_at.desc()).offset((page - 1) * size).limit(size)
+    )
+    items = [
         {
             "question_id": str(w.question_id),
             "wrong_count": w.wrong_count,
@@ -57,6 +61,7 @@ async def list_wrong(
         }
         for w, q in rows.all()
     ]
+    return {"items": items, "total": total, "page": page, "size": size}
 
 
 @router.post("/{question_id}/master", summary="标记错题为已掌握")

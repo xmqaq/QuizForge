@@ -31,7 +31,8 @@ app = FastAPI(title="QuizForge API", version="0.1.0", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
+    # 用 Bearer Token 鉴权，不依赖 cookie；credentials=False 才能与 origins="*" 合法共存
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )

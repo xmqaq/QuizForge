@@ -1,7 +1,7 @@
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
@@ -38,17 +38,19 @@ async def create_plan(
     return plan
 
 
-@router.get("", response_model=list[StudyPlanResponse], summary="我的学习计划")
+@router.get("", summary="我的学习计划")
 async def list_plans(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    page: int = Query(1, ge=1),
+    size: int = Query(20, ge=1, le=100),
 ):
+    base = select(StudyPlan).where(StudyPlan.user_id == current_user.id)
+    total = await db.scalar(select(func.count()).select_from(base.subquery()))
     rows = await db.scalars(
-        select(StudyPlan)
-        .where(StudyPlan.user_id == current_user.id)
-        .order_by(StudyPlan.created_at.desc())
+        base.order_by(StudyPlan.created_at.desc()).offset((page - 1) * size).limit(size)
     )
-    return list(rows)
+    return {"items": [StudyPlanResponse.model_validate(r) for r in rows], "total": total, "page": page, "size": size}
 
 
 @router.get("/{plan_id}", response_model=StudyPlanResponse, summary="学习计划详情")

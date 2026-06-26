@@ -2,7 +2,7 @@ import enum
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Column, DateTime, Enum, ForeignKey, Integer, Uuid, func
+from sqlalchemy import JSON, Column, DateTime, Enum, ForeignKey, Integer, Uuid, func
 from sqlalchemy.orm import relationship
 
 from app.database import Base
@@ -32,6 +32,7 @@ class QuizSession(Base):
     answered_count = Column(Integer, default=0, nullable=False)
     correct_count = Column(Integer, default=0, nullable=False)
     time_limit_seconds = Column(Integer, nullable=True)
+    question_ids = Column(JSON, default=list, nullable=False)  # 选中的题目顺序，保证整场一致
     started_at = Column(DateTime, default=func.now(), nullable=False)
     finished_at = Column(DateTime, nullable=True)
     status = Column(Enum(SessionStatus), default=SessionStatus.active, nullable=False)
