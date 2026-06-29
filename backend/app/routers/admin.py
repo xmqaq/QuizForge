@@ -38,6 +38,29 @@ def get_site_config() -> dict:
     return {**SITE_DEFAULTS, **cfg}
 
 
+def sync_env_to_redis():
+    """把 .env 里的 DeepSeek 配置同步到 Redis（仅当 Redis 中对应字段为空时才写入）。"""
+    raw = _redis.get(MODELS_KEY)
+    stored: dict = json.loads(raw) if raw else {}
+    deepseek = stored.get("deepseek", {})
+    changed = False
+    if not deepseek.get("api_key") and settings.DEEPSEEK_API_KEY:
+        deepseek["api_key"] = settings.DEEPSEEK_API_KEY
+        changed = True
+    if not deepseek.get("base_url") and settings.DEEPSEEK_BASE_URL:
+        deepseek["base_url"] = settings.DEEPSEEK_BASE_URL
+        changed = True
+    if not deepseek.get("model") and settings.DEEPSEEK_MODEL:
+        deepseek["model"] = settings.DEEPSEEK_MODEL
+        changed = True
+    if not deepseek.get("enabled") and settings.DEEPSEEK_API_KEY:
+        deepseek["enabled"] = True
+        changed = True
+    if changed:
+        stored["deepseek"] = deepseek
+        _redis.set(MODELS_KEY, json.dumps(stored))
+
+
 def get_providers() -> list[dict]:
     """返回所有模型商配置（含预设+自定义扩展），api_key 已存储。"""
     raw = _redis.get(MODELS_KEY)
@@ -183,16 +206,26 @@ async def delete_custom_provider(provider_id: str, _: User = Depends(require_rol
     return {"detail": "已删除"}
 
 
+class ProviderTestRequest(BaseModel):
+    api_key: str | None = None
+    base_url: str | None = None
+    model: str | None = None
+
+
 @router.post("/providers/{provider_id}/fetch-models", summary="获取模型列表")
-async def fetch_models(provider_id: str, _: User = Depends(require_roles(UserRole.admin))):
+async def fetch_models(
+    provider_id: str,
+    req: ProviderTestRequest | None = None,
+    _: User = Depends(require_roles(UserRole.admin)),
+):
     """调用对应服务商的 /models 接口，返回可用模型列表。"""
     raw = _redis.get(MODELS_KEY)
     stored: dict = json.loads(raw) if raw else {}
     pdata = stored.get(provider_id, {})
-    # 找到预设 base_url
     preset = next((p for p in PRESET_PROVIDERS if p["id"] == provider_id), None)
-    base_url = pdata.get("base_url") or (preset["base_url"] if preset else "")
-    api_key = pdata.get("api_key", "")
+    # 优先使用请求体里的临时值，其次用 Redis，再用预设
+    api_key = (req and req.api_key) or pdata.get("api_key", "")
+    base_url = (req and req.base_url) or pdata.get("base_url") or (preset["base_url"] if preset else "")
     if not api_key:
         raise HTTPException(400, "请先配置该服务商的 API Key")
     if not base_url:
@@ -207,15 +240,19 @@ async def fetch_models(provider_id: str, _: User = Depends(require_roles(UserRol
 
 
 @router.post("/providers/{provider_id}/verify", summary="验证 API Key 有效性")
-async def verify_provider(provider_id: str, _: User = Depends(require_roles(UserRole.admin))):
+async def verify_provider(
+    provider_id: str,
+    req: ProviderTestRequest | None = None,
+    _: User = Depends(require_roles(UserRole.admin)),
+):
     """发送一个最小 token 请求，验证 key 是否有效。"""
     raw = _redis.get(MODELS_KEY)
     stored: dict = json.loads(raw) if raw else {}
     pdata = stored.get(provider_id, {})
     preset = next((p for p in PRESET_PROVIDERS if p["id"] == provider_id), None)
-    base_url = pdata.get("base_url") or (preset["base_url"] if preset else "")
-    api_key = pdata.get("api_key", "")
-    model = pdata.get("model") or (preset["default_model"] if preset else "")
+    api_key = (req and req.api_key) or pdata.get("api_key", "")
+    base_url = (req and req.base_url) or pdata.get("base_url") or (preset["base_url"] if preset else "")
+    model = (req and req.model) or pdata.get("model") or (preset["default_model"] if preset else "")
     if not api_key:
         raise HTTPException(400, "请先配置 API Key")
     try:
@@ -244,3 +281,10 @@ def _reload_ai_client():
             base_url=provider.get("base_url", ""),
             model=provider.get("model", ""),
         )
+
+
+# 模块加载时立即同步一次
+try:
+    sync_env_to_redis()
+except Exception:
+    pass  # Redis 未就绪时静默失败

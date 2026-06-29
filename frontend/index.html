@@ -1651,7 +1651,7 @@ async function renderProviders() {
           </div>
           <div style="display:flex;gap:8px;margin-top:4px">
             <button class="btn sm save-provider-btn" data-pid="${p.id}">保存</button>
-            <button class="btn ghost sm verify-btn" data-pid="${p.id}" ${hasKey?"":"disabled"}>验证 Key</button>
+            <button class="btn ghost sm verify-btn" data-pid="${p.id}">验证 Key</button>
             ${p.id.startsWith("custom_") ? `<button class="btn ghost sm del-provider-btn" data-pid="${p.id}" style="color:var(--wrong);border-color:var(--wrong);margin-left:auto">删除</button>` : ""}
           </div>
           <div id="pverify_${p.id}" style="font-size:12px;margin-top:4px"></div>
@@ -1703,12 +1703,18 @@ function bindProviderEvents() {
       const pid = btn.dataset.pid;
       btn.disabled = true; btn.textContent = "拉取中…";
       try {
-        // 先保存当前 key（如果有输入）
-        const keyInp = document.getElementById("pkey_" + pid);
-        if (keyInp?.value) {
-          await api(`/admin/providers/${pid}`, { method:"PUT", body:{ api_key: keyInp.value } });
-        }
-        const { models } = await api(`/admin/providers/${pid}/fetch-models`, { method:"POST" });
+        // 把当前输入框的值直接传给后端，无需提前保存
+        const body = {};
+        const key = document.getElementById("pkey_" + pid)?.value?.trim();
+        const url = document.getElementById("purl_" + pid)?.value?.trim();
+        const model = document.getElementById("pmodel_" + pid)?.value?.trim();
+        if (key) body.api_key = key;
+        if (url) body.base_url = url;
+        if (model) body.model = model;
+        const { models } = await api(`/admin/providers/${pid}/fetch-models`, {
+          method: "POST",
+          body: Object.keys(body).length ? body : undefined,
+        });
         const sel = document.getElementById("pmodels_" + pid)?.querySelector("select");
         if (sel) {
           sel.innerHTML = `<option value="">— 选择模型 —</option>` + models.map(m => `<option value="${esc(m)}">${esc(m)}</option>`).join("");
@@ -1765,8 +1771,20 @@ function bindProviderEvents() {
       const pid = btn.dataset.pid;
       btn.disabled = true; btn.textContent = "验证中…";
       const statusEl = document.getElementById("pverify_" + pid);
+      if (statusEl) statusEl.innerHTML = `<span style="color:var(--muted)">验证中…</span>`;
       try {
-        const res = await api(`/admin/providers/${pid}/verify`, { method:"POST" });
+        // 把当前输入框的值传给后端，无需提前保存
+        const body = {};
+        const key = document.getElementById("pkey_" + pid)?.value?.trim();
+        const url = document.getElementById("purl_" + pid)?.value?.trim();
+        const model = document.getElementById("pmodel_" + pid)?.value?.trim();
+        if (key) body.api_key = key;
+        if (url) body.base_url = url;
+        if (model) body.model = model;
+        const res = await api(`/admin/providers/${pid}/verify`, {
+          method: "POST",
+          body: Object.keys(body).length ? body : undefined,
+        });
         if (statusEl) {
           statusEl.innerHTML = res.valid
             ? `<span style="color:var(--correct)">✓ ${esc(res.detail)}</span>`
