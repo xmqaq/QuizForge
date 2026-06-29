@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # 本地一键启动 QuizForge 全栈(复用本机 postgres / redis)
 # 用法: ./dev.sh        启动(Ctrl-C 一并停掉所有子进程)
-#       ./dev.sh stop   停止残留的服务、释放 8000/8080 端口
+#       ./dev.sh stop   停止残留的服务、释放 8000/5173 端口
 set -euo pipefail
 cd "$(dirname "$0")"
 ROOT="$(pwd)"
@@ -17,8 +17,9 @@ free_port() {
 stop_services() {
   pkill -f "uvicorn app.main:app" 2>/dev/null || true
   pkill -9 -f "celery -A celery_worker" 2>/dev/null || true
+  pkill -f "vite" 2>/dev/null || true
   free_port 8000
-  free_port 8080
+  free_port 5173
 }
 
 # 子命令: ./dev.sh stop
@@ -46,9 +47,9 @@ fi
 export DATABASE_URL="postgresql+asyncpg://quizforge:quizforge@localhost:5432/quizforge"
 export REDIS_URL="redis://localhost:6379/0"
 
-# 4. 启动前自愈:清掉上次没退干净的残留,释放 8000/8080
+# 4. 启动前自愈:清掉上次没退干净的残留,释放 8000/5173
 if lsof -nP -iTCP:8000 -sTCP:LISTEN >/dev/null 2>&1 \
-   || lsof -nP -iTCP:8080 -sTCP:LISTEN >/dev/null 2>&1; then
+   || lsof -nP -iTCP:5173 -sTCP:LISTEN >/dev/null 2>&1; then
   echo "⚠ 端口被占用,清理上次残留…"
   stop_services
   sleep 1
@@ -59,15 +60,15 @@ fi
 ./.venv/bin/celery -A celery_worker worker --loglevel=warning &
 cd "$ROOT"
 
-# 6. 前端:注入 API 地址后静态托管(前端走相对路径,本地无反代故注入)
-mkdir -p .dev-serve
-sed 's#<body>#<body><script>window.QUIZFORGE_API="http://localhost:8000";</script>#' \
-  frontend/index.html > .dev-serve/index.html
-( cd .dev-serve && python3 -m http.server 8080 >/dev/null 2>&1 ) &
+# 6. 前端:Vite dev server(内置反代 /api → localhost:8000)
+cd frontend
+[ ! -d node_modules ] && npm install
+npm run dev &
+cd "$ROOT"
 
 trap 'echo; echo "停止所有服务…"; kill 0' EXIT INT TERM
 echo
-echo "  前端  →  http://localhost:8080"
+echo "  前端  →  http://localhost:5173"
 echo "  后端  →  http://localhost:8000/docs"
 echo "  (Ctrl-C 停止)"
 wait
