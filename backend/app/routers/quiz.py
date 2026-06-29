@@ -31,18 +31,27 @@ async def _get_session(db: AsyncSession, session_id: uuid.UUID, user: User) -> Q
 async def _pick_questions(
     db: AsyncSession, bank_id: uuid.UUID, mode: QuizMode, user_id: uuid.UUID, limit: int | None
 ) -> list[Question]:
-    stmt = select(Question).where(
-        Question.bank_id == bank_id, Question.status == QuestionStatus.approved
-    )
+    # wrong_only：不限状态，允许 pending_review 的错题也出现
     if mode == QuizMode.wrong_only:
-        stmt = stmt.join(WrongQuestion, WrongQuestion.question_id == Question.id).where(
-            WrongQuestion.user_id == user_id, WrongQuestion.is_mastered.is_(False)
+        stmt = (
+            select(Question)
+            .join(WrongQuestion, WrongQuestion.question_id == Question.id)
+            .where(
+                Question.bank_id == bank_id,
+                WrongQuestion.user_id == user_id,
+                WrongQuestion.is_mastered.is_(False),
+            )
+            .order_by(WrongQuestion.last_wrong_at.desc())
         )
-
-    if mode in (QuizMode.random, QuizMode.simulation):
-        stmt = stmt.order_by(func.random())
-    else:  # sequential / wrong_only keep insertion order
-        stmt = stmt.order_by(Question.created_at)
+    else:
+        stmt = select(Question).where(
+            Question.bank_id == bank_id,
+            Question.status == QuestionStatus.approved,
+        )
+        if mode in (QuizMode.random, QuizMode.simulation):
+            stmt = stmt.order_by(func.random())
+        else:
+            stmt = stmt.order_by(Question.created_at)
 
     if limit:
         stmt = stmt.limit(limit)

@@ -1350,21 +1350,52 @@ async function viewWrong(page = 1, bankId = "") {
     bankOpts += banks.map(b => `<option value="${b.id}" ${b.id===bankId?"selected":""}>${esc(b.title)}</option>`).join("");
   } catch {}
 
-  const rows = items.length ? items.map(w => `
-    <div class="card" style="margin-bottom:10px">
-      <div class="meta" style="margin-bottom:8px;display:flex;gap:6px;flex-wrap:wrap">
-        <span class="pill ${w.is_mastered?"ok":"warn"}">${w.is_mastered?"已掌握":"待复习"}</span>
-        <span class="pill">错 ${w.wrong_count} 次</span>
-        <span class="pill">答案 ${w.question.correct_answer}</span>
-      </div>
-      <div style="font-weight:500;margin-bottom:10px">${esc(w.question.content)}</div>
-      ${w.question.explanation ? `<div class="explain" style="margin-bottom:10px;font-size:13px">${esc(w.question.explanation)}</div>` : ""}
-      <div style="display:flex;gap:8px">
-        ${w.is_mastered ? "" : `<button class="btn ghost sm" data-q="${w.question_id}" data-action="master">标记已掌握</button>`}
-        <button class="btn ghost sm" data-q="${w.question_id}" data-action="remove"
-          style="color:var(--wrong);border-color:var(--wrong)">从错题本移除</button>
-      </div>
-    </div>`).join("") : `<div class="empty"><div class="big">✓</div>错题本是空的，继续保持</div>`;
+  const rows = items.length ? items.map(w => {
+    const q = w.question;
+    const optHtml = ["A","B","C","D"].map(L => `
+      <div style="
+        display:flex;align-items:flex-start;gap:8px;
+        padding:7px 10px;margin-bottom:5px;border-radius:8px;font-size:13px;
+        background:${q.correct_answer===L?"var(--correct-soft)":"var(--paper)"};
+        border:1px solid ${q.correct_answer===L?"var(--correct)":"var(--line)"}">
+        <span style="
+          flex:none;width:20px;height:20px;border-radius:50%;
+          display:grid;place-items:center;font-size:11px;font-weight:700;
+          background:${q.correct_answer===L?"var(--correct)":"var(--line)"};
+          color:${q.correct_answer===L?"#fff":"var(--muted)"}">${L}</span>
+        <span style="flex:1;color:${q.correct_answer===L?"var(--correct)":"var(--ink)"}">
+          ${esc(q["option_"+L.toLowerCase()]||"")}
+          ${q.correct_answer===L?`<span style="font-size:11px;margin-left:4px;opacity:.7">✓ 正确答案</span>`:""}
+        </span>
+      </div>`).join("");
+
+    return `
+      <div class="card" style="margin-bottom:10px" data-wid="${w.question_id}">
+        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:8px">
+          <span class="pill ${w.is_mastered?"ok":"warn"}">${w.is_mastered?"已掌握":"待复习"}</span>
+          <span class="pill">错 ${w.wrong_count} 次</span>
+          <span class="pill">正确答案 ${q.correct_answer}</span>
+          <button class="btn ghost sm wrong-expand" data-wid="${w.question_id}"
+            style="margin-left:auto;font-size:12px">展开选项</button>
+        </div>
+        <div style="font-weight:500;margin-bottom:8px">${esc(q.content)}</div>
+        <div id="wopts_${w.question_id}" style="display:none;margin-bottom:8px">
+          ${optHtml}
+        </div>
+        ${q.explanation ? `
+          <div class="explain" style="margin-bottom:10px;font-size:13px">
+            ${esc(q.explanation)}
+          </div>` : ""}
+        <div style="display:flex;gap:8px;margin-top:6px">
+          ${w.is_mastered ? "" : `
+            <button class="btn ghost sm" data-q="${w.question_id}" data-action="master">
+              标记已掌握
+            </button>`}
+          <button class="btn ghost sm" data-q="${w.question_id}" data-action="remove"
+            style="color:var(--wrong);border-color:var(--wrong)">从错题本移除</button>
+        </div>
+      </div>`;
+  }).join("") : `<div class="empty"><div class="big">✓</div>错题本是空的，继续保持</div>`;
 
   const pager = totalPages > 1 ? `
     <div style="display:flex;align-items:center;justify-content:center;gap:10px;margin-top:16px">
@@ -1381,6 +1412,19 @@ async function viewWrong(page = 1, bankId = "") {
      ${rows}${pager}`);
 
   document.getElementById("w_bank").onchange = (e) => viewWrong(1, e.target.value);
+
+  // 展开/收起选项
+  root.querySelectorAll(".wrong-expand").forEach(btn => {
+    btn.onclick = (e) => {
+      e.stopPropagation();
+      const opts = document.getElementById("wopts_" + btn.dataset.wid);
+      if (!opts) return;
+      const open = opts.style.display === "none";
+      opts.style.display = open ? "block" : "none";
+      btn.textContent = open ? "收起选项" : "展开选项";
+    };
+  });
+
   root.querySelectorAll("[data-q]").forEach(b => b.onclick = async () => {
     try {
       if (b.dataset.action === "remove") {
