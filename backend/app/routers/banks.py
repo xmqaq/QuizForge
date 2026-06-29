@@ -67,6 +67,37 @@ async def create_bank(
     return bank
 
 
+@router.get("/public", summary="公开题库广场（无需登录）")
+async def list_public_banks(
+    db: AsyncSession = Depends(get_db),
+    page: int = Query(1, ge=1),
+    size: int = Query(20, ge=1, le=50),
+    industry: str | None = None,
+    search: str | None = None,
+    sort: str = Query("hot"),
+):
+    stmt = select(QuestionBank).where(
+        QuestionBank.is_public.is_(True),
+        QuestionBank.status == BankStatus.published,
+        QuestionBank.question_count > 0,
+    )
+    if industry:
+        stmt = stmt.where(QuestionBank.industry == industry)
+    if search:
+        stmt = stmt.where(QuestionBank.title.ilike(f"%{search}%"))
+
+    total = await db.scalar(select(func.count()).select_from(stmt.subquery()))
+
+    if sort == "hot":
+        stmt = stmt.order_by(QuestionBank.question_count.desc(), QuestionBank.created_at.desc())
+    else:
+        stmt = stmt.order_by(QuestionBank.created_at.desc())
+
+    rows = await db.scalars(stmt.offset((page - 1) * size).limit(size))
+    items = [QuestionBankResponse.model_validate(r) for r in rows]
+    return {"items": items, "total": total, "page": page, "size": size}
+
+
 @router.get("/{bank_id}", response_model=QuestionBankResponse, summary="题库详情")
 async def get_bank(bank_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
     return await _get_bank_or_404(db, bank_id)

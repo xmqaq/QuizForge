@@ -256,6 +256,29 @@
   .admin-table td { padding: 11px 14px; font-size: 13px; border-bottom: 1px solid var(--line); vertical-align: middle; }
   .admin-table tr:last-child td { border-bottom: none; }
   .admin-table tr:hover td { background: #FAFBFC; }
+
+  /* ---------- 批量操作 ---------- */
+  .bulk-bar {
+    position: sticky; bottom: 20px; left: 0; right: 0;
+    background: var(--ink); color: #fff;
+    border-radius: 12px; padding: 12px 18px;
+    display: flex; align-items: center; gap: 12px;
+    box-shadow: 0 8px 32px rgba(0,0,0,.25);
+    margin-top: 16px;
+    transform: translateY(20px); opacity: 0;
+    transition: opacity .2s, transform .2s;
+    pointer-events: none;
+  }
+  .bulk-bar.show { opacity: 1; transform: translateY(0); pointer-events: all; }
+  .bulk-bar .cnt { font-size: 14px; font-weight: 600; flex: 1; }
+  .bulk-bar .cnt span { color: #A5B4FC; }
+  .bulk-btn { padding: 7px 14px; border-radius: 8px; font-size: 13px; font-weight: 500;
+    border: 1px solid rgba(255,255,255,.2); background: rgba(255,255,255,.1);
+    color: #fff; cursor: pointer; font-family: inherit; }
+  .bulk-btn:hover { background: rgba(255,255,255,.18); }
+  .bulk-btn.danger { border-color: rgba(229,72,77,.5); background: rgba(229,72,77,.2); color: #FCA5A5; }
+  .bulk-btn.danger:hover { background: rgba(229,72,77,.35); }
+  .q-checkbox { width: 16px; height: 16px; cursor: pointer; accent-color: var(--accent); flex: none; }
 </style>
 </head>
 <body>
@@ -268,10 +291,10 @@ const root = document.getElementById("root");
 let S = { token: localStorage.getItem("qf_token"), user: null, view: "banks", bank: null };
 
 /* ---------------- api helper ---------------- */
-async function api(path, { method, body, form } = {}) {
+async function api(path, { method, body, form, noAuth } = {}) {
   method = method || (body !== undefined || form ? "POST" : "GET");
   const headers = {};
-  if (S.token) headers.Authorization = "Bearer " + S.token;
+  if (S.token && !noAuth) headers.Authorization = "Bearer " + S.token;
   let payload;
   if (form) { payload = form; }
   else if (body !== undefined) { headers["Content-Type"] = "application/json"; payload = JSON.stringify(body); }
@@ -351,6 +374,7 @@ const NAV = [
   { v:"wrong",        l:"错题本",   ic:"✕", role:null },
   { v:"stats",        l:"统计",     ic:"▤", role:null },
   { v:"plan",         l:"学习计划", ic:"▷", role:null },
+  { v:"plaza",        l:"题库广场", ic:"◈", role:null },
   { v:"admin",        l:"系统设置", ic:"⚙", role:"admin" },
 ];
 function shell(title, sub, inner) {
@@ -390,6 +414,7 @@ async function route() {
     if (S.view === "wrong") return await viewWrong();
     if (S.view === "stats") return await viewStats();
     if (S.view === "plan") return await viewPlan();
+    if (S.view === "plaza") return await viewPlaza();
     if (S.view === "admin" || S.view === "admin_providers" || S.view === "admin_users" || S.view === "admin_site") return await viewAdmin(S.view);
   } catch (e) { toast(e.message, true); }
 }
@@ -536,43 +561,71 @@ async function viewBankDetail() {
   const b = await api("/banks/" + S.bank);
   const { items } = await api("/questions?bank_id=" + S.bank + "&size=100");
 
-  const qlist = items.length ? items.map((q, i) => `
-    <div class="card" style="margin-bottom:10px" data-qid="${q.id}">
-      <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:8px">
-        <span class="pill">${String(i+1).padStart(2,"0")}</span>
-        <span class="pill ${q.status==="approved"?"ok":q.status==="rejected"?"":"warn"}">${L("qstatus",q.status)}</span>
-        <span class="pill">${L("difficulty",q.difficulty)}</span>
-        <span style="margin-left:auto;display:flex;gap:6px">
-          <button class="btn ghost sm" style="font-size:12px" onclick="toggleQ('${q.id}')">展开</button>
-          ${q.status==="pending_review"?`
-            <button class="btn sm" style="background:var(--correct);border:none;font-size:12px" onclick="approveQ('${q.id}')">通过</button>
-            <button class="btn sm" style="background:var(--wrong);border:none;font-size:12px" onclick="rejectQ('${q.id}')">拒绝</button>`:""}
-        </span>
+  let _selected = new Set();
+
+  const renderQlist = (items) => {
+    if (!items.length) return `<div class="empty"><div class="big">✎</div>这个题库还没有题目，用 AI 生成一批</div>`;
+    return `
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;padding:8px 12px;
+        background:var(--paper);border-radius:9px;border:1px solid var(--line)">
+        <input type="checkbox" class="q-checkbox" id="sel_all" title="全选">
+        <label for="sel_all" style="font-size:13px;color:var(--muted);cursor:pointer;flex:1">
+          全选本页（共 ${items.length} 题）
+        </label>
+        <span style="font-size:12px;color:var(--muted)" id="sel_count"></span>
       </div>
-      <div style="font-weight:500">${esc(q.content)}</div>
-      <div id="qdet_${q.id}" style="display:none;margin-top:10px">
-        ${["A","B","C","D"].map(L2=>`
-          <div style="padding:7px 10px;margin-bottom:5px;border-radius:8px;font-size:13px;
-            background:${q.correct_answer===L2?"var(--correct-soft)":"var(--paper)"};
-            border:1px solid ${q.correct_answer===L2?"var(--correct)":"var(--line)"}">
-            <b>${L2}.</b> ${esc(q["option_"+L2.toLowerCase()])}
-            ${q.correct_answer===L2?`<span style="color:var(--correct);margin-left:6px;font-size:12px">✓ 正确答案</span>`:""}
-          </div>`).join("")}
-        ${q.explanation?`<div class="explain" style="margin-top:8px;font-size:13px">${esc(q.explanation)}</div>`:""}
-        <div style="display:flex;gap:8px;margin-top:12px;padding-top:10px;border-top:1px solid var(--line)">
-          <button class="btn ghost sm" style="font-size:12px" onclick="editQ('${q.id}')">✎ 编辑</button>
-          <button class="btn sm" style="background:var(--wrong);border:none;font-size:12px;margin-left:auto"
-            onclick="deleteQ('${q.id}','${esc(q.content).substring(0,20)}')">删除此题</button>
-        </div>
-      </div>
-    </div>`).join("") :
-    `<div class="empty"><div class="big">✎</div>这个题库还没有题目，用 AI 生成一批</div>`;
+      ${items.map((q, i) => `
+        <div class="card" style="margin-bottom:10px;display:flex;gap:12px;align-items:flex-start" data-qid="${q.id}">
+          <input type="checkbox" class="q-checkbox q-sel" data-id="${q.id}"
+            style="margin-top:3px" ${_selected.has(q.id) ? "checked" : ""}>
+          <div style="flex:1;min-width:0">
+            <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:8px">
+              <span class="pill">${String(i+1).padStart(2,"0")}</span>
+              <span class="pill ${q.status==="approved"?"ok":q.status==="rejected"?"":"warn"}">${L("qstatus",q.status)}</span>
+              <span class="pill">${L("difficulty",q.difficulty)}</span>
+              <span style="margin-left:auto;display:flex;gap:6px">
+                <button class="btn ghost sm" style="font-size:12px" onclick="toggleQ('${q.id}')">展开</button>
+                ${q.status==="pending_review"?`
+                  <button class="btn sm" style="background:var(--correct);border:none;font-size:12px" onclick="approveQ('${q.id}')">通过</button>
+                  <button class="btn sm" style="background:var(--wrong);border:none;font-size:12px" onclick="rejectQ('${q.id}')">拒绝</button>`:""}
+              </span>
+            </div>
+            <div style="font-weight:500">${esc(q.content)}</div>
+            <div id="qdet_${q.id}" style="display:none;margin-top:10px">
+              ${["A","B","C","D"].map(L2=>`
+                <div style="padding:7px 10px;margin-bottom:5px;border-radius:8px;font-size:13px;
+                  background:${q.correct_answer===L2?"var(--correct-soft)":"var(--paper)"};
+                  border:1px solid ${q.correct_answer===L2?"var(--correct)":"var(--line)"}">
+                  <b>${L2}.</b> ${esc(q["option_"+L2.toLowerCase()])}
+                  ${q.correct_answer===L2?`<span style="color:var(--correct);margin-left:6px;font-size:12px">✓ 正确答案</span>`:""}
+                </div>`).join("")}
+              ${q.explanation?`<div class="explain" style="margin-top:8px;font-size:13px">${esc(q.explanation)}</div>`:""}
+              <div style="display:flex;gap:8px;margin-top:12px;padding-top:10px;border-top:1px solid var(--line)">
+                <button class="btn ghost sm" style="font-size:12px" onclick="editQ('${q.id}')">✎ 编辑</button>
+                <button class="btn sm" style="background:var(--wrong);border:none;font-size:12px;margin-left:auto"
+                  onclick="deleteQ('${q.id}','${esc(q.content).substring(0,20)}')">删除此题</button>
+              </div>
+            </div>
+          </div>
+        </div>`).join("")}
+      <div class="bulk-bar" id="bulk_bar">
+        <div class="cnt">已选 <span id="bulk_cnt">0</span> 题</div>
+        <button class="bulk-btn" id="bulk_approve">✓ 批量通过</button>
+        <button class="bulk-btn" id="bulk_reject">✕ 批量拒绝</button>
+        <button class="bulk-btn danger" id="bulk_delete">🗑 批量删除</button>
+        <button class="bulk-btn" id="bulk_clear" style="background:none;border:none;opacity:.6">取消选择</button>
+      </div>`;
+  };
+
+  const qlist = renderQlist(items);
 
   shell(esc(b.title), `${b.question_count} 题`,
     `<div style="display:flex;gap:10px;margin-bottom:20px;flex-wrap:wrap">
        <button class="btn" id="start" ${b.question_count?"":"disabled"}>开始答题</button>
        <button class="btn ghost" id="back">← 返回题库</button>
        <button class="btn ghost" id="add_manual">＋ 手动添加题目</button>
+       <button class="btn ghost" id="btn_import_xl">⬆ 导入 Excel</button>
+       <button class="btn ghost" id="btn_export_xl" ${b.question_count ? "" : "disabled"}>⬇ 导出 Excel</button>
      </div>
 
      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:16px;margin-top:-8px">
@@ -789,6 +842,164 @@ async function viewBankDetail() {
       return toast("四个选项不能为空", true);
     try { await api("/questions/" + id, { method: "PUT", body }); toast("题目已保存"); viewBankDetail(); }
     catch(e) { toast(e.message, true); }
+  };
+
+  // 批量选择逻辑
+  const updateBulkBar = () => {
+    const cnt = _selected.size;
+    const bar = document.getElementById("bulk_bar");
+    const cntEl = document.getElementById("bulk_cnt");
+    const selCount = document.getElementById("sel_count");
+    if (bar) bar.classList.toggle("show", cnt > 0);
+    if (cntEl) cntEl.textContent = cnt;
+    if (selCount) selCount.textContent = cnt > 0 ? `已选 ${cnt} 题` : "";
+  };
+
+  root.querySelectorAll(".q-sel").forEach(cb => {
+    cb.onchange = () => {
+      cb.checked ? _selected.add(cb.dataset.id) : _selected.delete(cb.dataset.id);
+      const allCb = document.getElementById("sel_all");
+      if (allCb) {
+        const all = root.querySelectorAll(".q-sel");
+        allCb.checked = all.length > 0 && [...all].every(c => c.checked);
+        allCb.indeterminate = _selected.size > 0 && _selected.size < all.length;
+      }
+      updateBulkBar();
+    };
+  });
+
+  const selAllCb = document.getElementById("sel_all");
+  if (selAllCb) {
+    selAllCb.onchange = () => {
+      root.querySelectorAll(".q-sel").forEach(cb => {
+        cb.checked = selAllCb.checked;
+        selAllCb.checked ? _selected.add(cb.dataset.id) : _selected.delete(cb.dataset.id);
+      });
+      updateBulkBar();
+    };
+  }
+
+  const doBulk = async (action, confirmMsg) => {
+    if (_selected.size === 0) return toast("请先选择题目", true);
+    if (!confirm(confirmMsg)) return;
+    try {
+      const res = await api("/questions/bulk", {
+        method: "POST",
+        body: { question_ids: [..._selected], action },
+      });
+      toast(res.detail);
+      _selected.clear();
+      viewBankDetail();
+    } catch(e) { toast(e.message, true); }
+  };
+
+  document.getElementById("bulk_approve")?.addEventListener("click", () =>
+    doBulk("approve", `确定批量通过选中的 ${_selected.size} 道题目？`));
+  document.getElementById("bulk_reject")?.addEventListener("click", () =>
+    doBulk("reject", `确定批量拒绝选中的 ${_selected.size} 道题目？`));
+  document.getElementById("bulk_delete")?.addEventListener("click", () =>
+    doBulk("delete", `确定永久删除选中的 ${_selected.size} 道题目？此操作不可恢复！`));
+  document.getElementById("bulk_clear")?.addEventListener("click", () => {
+    _selected.clear();
+    root.querySelectorAll(".q-sel").forEach(cb => cb.checked = false);
+    const allCb = document.getElementById("sel_all");
+    if (allCb) { allCb.checked = false; allCb.indeterminate = false; }
+    updateBulkBar();
+  });
+
+  // 导入 Excel
+  document.getElementById("btn_import_xl").onclick = () => {
+    const body = document.getElementById("body");
+    if (document.getElementById("xl_import_form")) return;
+    body.insertAdjacentHTML("afterbegin", `
+      <div class="card" id="xl_import_form" style="margin-bottom:18px">
+        <div style="font-weight:600;font-size:15px;margin-bottom:6px">导入 Excel 题目</div>
+        <div style="font-size:13px;color:var(--muted);margin-bottom:14px">
+          请使用标准模板填写后上传，支持一次导入最多 500 道题目。
+          <a href="#" id="dl_template" style="color:var(--accent);margin-left:6px">下载模板 ↓</a>
+        </div>
+        <div class="row" style="align-items:flex-end;gap:10px">
+          <div style="flex:2"><label class="f">选择 Excel 文件</label>
+            <input class="in" type="file" id="xl_file" accept=".xlsx,.xls"></div>
+          <div style="flex:none">
+            <label class="f" style="visibility:hidden">操作</label>
+            <label style="font-size:13px;display:flex;align-items:center;gap:6px;cursor:pointer">
+              <input type="checkbox" id="xl_approve" checked> 自动审核通过
+            </label>
+          </div>
+        </div>
+        <div id="xl_progress" style="display:none;margin-top:10px;font-size:13px;color:var(--muted)"></div>
+        <div style="display:flex;gap:8px;margin-top:12px">
+          <button class="btn sm" id="xl_submit">开始导入</button>
+          <button class="btn ghost sm" id="xl_cancel">取消</button>
+        </div>
+      </div>`);
+
+    document.getElementById("dl_template").onclick = async (e) => {
+      e.preventDefault();
+      try {
+        const resp = await fetch((window.QUIZFORGE_API || "") + "/api/v1/excel/template",
+          { headers: { Authorization: "Bearer " + S.token } });
+        const blob = await resp.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url; a.download = "quizforge_import_template.xlsx"; a.click();
+        URL.revokeObjectURL(url);
+      } catch(e) { toast("下载失败：" + e.message, true); }
+    };
+
+    document.getElementById("xl_cancel").onclick = () => document.getElementById("xl_import_form").remove();
+    document.getElementById("xl_submit").onclick = async () => {
+      const f = document.getElementById("xl_file").files[0];
+      if (!f) return toast("请先选择 Excel 文件", true);
+      const btn = document.getElementById("xl_submit");
+      btn.disabled = true; btn.textContent = "导入中…";
+      const prog = document.getElementById("xl_progress");
+      prog.style.display = "block"; prog.textContent = "正在解析文件…";
+      try {
+        const fd = new FormData();
+        fd.append("file", f);
+        const autoApprove = document.getElementById("xl_approve").checked;
+        const resp = await fetch(
+          (window.QUIZFORGE_API || "") + `/api/v1/excel/${S.bank}/import?auto_approve=${autoApprove}`,
+          { method: "POST", headers: { Authorization: "Bearer " + S.token }, body: fd }
+        );
+        const res = await resp.json();
+        if (!resp.ok) throw new Error(res.detail || "导入失败");
+        toast(res.detail);
+        if (res.errors?.length) {
+          prog.innerHTML = `<div style="color:var(--wrong)">${res.errors.map(e => esc(e)).join("<br>")}</div>`;
+        } else {
+          document.getElementById("xl_import_form").remove();
+        }
+        viewBankDetail();
+      } catch(e) { toast(e.message, true); prog.textContent = ""; }
+      finally { btn.disabled = false; btn.textContent = "开始导入"; }
+    };
+  };
+
+  // 导出 Excel
+  document.getElementById("btn_export_xl").onclick = async () => {
+    try {
+      const resp = await fetch(
+        (window.QUIZFORGE_API || "") + `/api/v1/excel/${S.bank}/export`,
+        { headers: { Authorization: "Bearer " + S.token } }
+      );
+      if (!resp.ok) {
+        const err = await resp.json();
+        throw new Error(err.detail || "导出失败");
+      }
+      const blob = await resp.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      const disp = resp.headers.get("Content-Disposition") || "";
+      const match = disp.match(/filename=(.+)$/);
+      a.download = match ? decodeURIComponent(match[1]) : "questions.xlsx";
+      a.click();
+      URL.revokeObjectURL(url);
+      toast("导出成功");
+    } catch(e) { toast(e.message, true); }
   };
 }
 
@@ -1512,6 +1723,109 @@ async function viewStats() {
       </div>`;
     document.querySelector(".main")?.appendChild(histWrap);
   } catch {}
+}
+
+/* ---------------- 题库广场 ---------------- */
+async function viewPlaza() {
+  let page = 1, sort = "hot", industry = "", search = "";
+
+  const load = async () => {
+    const params = new URLSearchParams({ page, size: 18, sort });
+    if (industry) params.set("industry", industry);
+    if (search) params.set("search", search);
+    const { items, total } = await api("/banks/public?" + params, { noAuth: true });
+    return { items, total };
+  };
+
+  const render = async () => {
+    const { items, total } = await load();
+    const totalPages = Math.ceil(total / 18);
+
+    const INDUSTRY_COLORS = {
+      it:"#E9ECFF,#2F4BFF", medical:"#E4F4ED,#1E9E6A", finance:"#FFF3E0,#B26A00",
+      education:"#E8F5E9,#2E7D32", construction:"#FBE9EA,#C62828",
+      language:"#F3E5F5,#6A1B9A", other:"#F4F5F7,#6B7280",
+    };
+
+    const cards = items.length ? items.map(b => {
+      const [bg, color] = (INDUSTRY_COLORS[b.industry] || INDUSTRY_COLORS.other).split(",");
+      return `
+        <div class="card bank plaza-card" data-id="${b.id}" style="cursor:pointer">
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:10px">
+            ${b.industry ? `<span class="pill" style="background:${bg};color:${color};border:none">${L("industry",b.industry)}</span>` : `<span></span>`}
+            <span style="font-size:12px;color:var(--muted);font-family:var(--mono)">${b.question_count} 题</span>
+          </div>
+          <h3 style="margin:0 0 6px;font-size:15px;font-weight:600;line-height:1.4">${esc(b.title)}</h3>
+          <div style="font-size:13px;color:var(--muted);min-height:18px;margin-bottom:14px">
+            ${esc(b.description) || "<span style='opacity:.4'>暂无描述</span>"}
+          </div>
+          <div style="border-top:1px solid var(--line);padding-top:10px;display:flex;align-items:center;justify-content:space-between">
+            <span class="bank-count-big" style="font-size:22px">${b.question_count}<small> 道题</small></span>
+            <button class="btn sm plaza-start" data-id="${b.id}" data-title="${esc(b.title)}"
+              style="font-size:12px" onclick="event.stopPropagation()">开始练习</button>
+          </div>
+        </div>`;
+    }).join("") : `<div class="empty" style="grid-column:1/-1"><div class="big">◈</div>暂无符合条件的公开题库</div>`;
+
+    const inds = [["","全部"],["it","IT"],["medical","医疗"],["finance","金融"],
+                  ["education","教育"],["construction","建筑"],["language","语言"],["other","其他"]];
+
+    const pager = totalPages > 1 ? `
+      <div style="display:flex;align-items:center;justify-content:center;gap:10px;margin-top:20px">
+        <button class="btn ghost sm" id="plaza_prev" ${page<=1?"disabled":""}>← 上一页</button>
+        <span style="font-size:13px;color:var(--muted)">${page} / ${totalPages} 页 · 共 ${total} 个题库</span>
+        <button class="btn ghost sm" id="plaza_next" ${page>=totalPages?"disabled":""}>下一页 →</button>
+      </div>` : "";
+
+    shell("题库广场", `${total} 个公开题库`,
+      `<div style="display:flex;gap:10px;align-items:center;margin-bottom:14px;flex-wrap:wrap">
+         <input class="in" id="plaza_search" value="${esc(search)}" placeholder="搜索题库名称…"
+           style="max-width:260px;flex:1">
+         <div style="display:flex;gap:6px;flex:none">
+           <button class="btn ${sort==="hot"?"":"ghost"} sm" id="sort_hot">🔥 热度</button>
+           <button class="btn ${sort==="new"?"":"ghost"} sm" id="sort_new">🆕 最新</button>
+         </div>
+       </div>
+       <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px">
+         ${inds.map(([v,l])=>`<button class="btn ${industry===v?"":"ghost"} sm plaza-ind" data-ind="${v}">${l}</button>`).join("")}
+       </div>
+       <div class="grid cols">${cards}</div>
+       ${pager}`);
+
+    let searchTimer;
+    document.getElementById("plaza_search").oninput = (e) => {
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(() => { search = e.target.value.trim(); page = 1; render(); }, 400);
+    };
+    document.getElementById("sort_hot").onclick = () => { sort = "hot"; page = 1; render(); };
+    document.getElementById("sort_new").onclick = () => { sort = "new"; page = 1; render(); };
+    root.querySelectorAll(".plaza-ind").forEach(b => {
+      b.onclick = () => { industry = b.dataset.ind; page = 1; render(); };
+    });
+
+    root.querySelectorAll(".plaza-card").forEach(c => {
+      c.onclick = () => {
+        if (!S.token) return toast("请先登录后再查看题库详情", true);
+        S.bank = c.dataset.id; S.view = "bank"; route();
+      };
+    });
+
+    root.querySelectorAll(".plaza-start").forEach(btn => {
+      btn.onclick = async (e) => {
+        e.stopPropagation();
+        if (!S.token) return toast("请先登录后再开始练习", true);
+        S.bank = btn.dataset.id;
+        S.view = "bank";
+        await route();
+        openQuizConfig(btn.dataset.title);
+      };
+    });
+
+    document.getElementById("plaza_prev")?.onclick = () => { page--; render(); };
+    document.getElementById("plaza_next")?.onclick = () => { page++; render(); };
+  };
+
+  await render();
 }
 
 /* ---------------- 学习计划 ---------------- */

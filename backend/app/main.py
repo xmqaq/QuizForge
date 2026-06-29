@@ -10,6 +10,7 @@ from app.routers import (
     ai,
     auth,
     banks,
+    excel,
     files,
     questions,
     quiz,
@@ -55,6 +56,7 @@ app.include_router(stats.router, prefix="/api/v1/stats", tags=["stats"])
 app.include_router(wrong.router, prefix="/api/v1/wrong", tags=["wrong"])
 app.include_router(study_plan.router, prefix="/api/v1/study-plans", tags=["study-plans"])
 app.include_router(admin.router, prefix="/api/v1/admin", tags=["admin"])
+app.include_router(excel.router, prefix="/api/v1/excel", tags=["excel"])
 
 
 @app.get("/", tags=["root"])

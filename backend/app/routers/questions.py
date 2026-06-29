@@ -1,7 +1,11 @@
 import uuid
+from collections import Counter
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel
 from sqlalchemy import func, select
+from sqlalchemy import update as sa_update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
@@ -130,3 +134,56 @@ async def reject_question(
     await db.commit()
     await db.refresh(q)
     return q
+
+
+class BulkActionRequest(BaseModel):
+    question_ids: list[uuid.UUID]
+    action: Literal["approve", "reject", "delete"]
+
+
+@router.post("/bulk", summary="批量操作题目")
+async def bulk_action(
+    data: BulkActionRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if not data.question_ids:
+        raise HTTPException(status_code=400, detail="请选择至少一道题目")
+    if len(data.question_ids) > 200:
+        raise HTTPException(status_code=400, detail="单次批量操作不能超过 200 道")
+
+    ids = data.question_ids
+
+    if data.action in ("approve", "reject"):
+        if current_user.role not in (UserRole.admin, UserRole.editor):
+            raise HTTPException(status_code=403, detail="无权进行审核操作")
+        new_status = QuestionStatus.approved if data.action == "approve" else QuestionStatus.rejected
+        await db.execute(
+            sa_update(Question)
+            .where(Question.id.in_(ids))
+            .values(status=new_status)
+        )
+        await db.commit()
+        return {"detail": f"已{'通过' if data.action == 'approve' else '拒绝'} {len(ids)} 道题目"}
+
+    if data.action == "delete":
+        if current_user.role != UserRole.admin:
+            raise HTTPException(status_code=403, detail="批量删除需要管理员权限")
+        rows = await db.scalars(select(Question).where(Question.id.in_(ids)))
+        questions = list(rows)
+        if not questions:
+            raise HTTPException(status_code=404, detail="未找到指定题目")
+
+        bank_counts = Counter(str(q.bank_id) for q in questions)
+        for q in questions:
+            await db.delete(q)
+
+        for bank_id_str, count in bank_counts.items():
+            bank = await db.get(QuestionBank, uuid.UUID(bank_id_str))
+            if bank:
+                bank.question_count = max(0, bank.question_count - count)
+
+        await db.commit()
+        return {"detail": f"已删除 {len(questions)} 道题目"}
+
+    raise HTTPException(status_code=400, detail="未知操作")
