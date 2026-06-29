@@ -1821,8 +1821,8 @@ async function viewPlaza() {
       };
     });
 
-    document.getElementById("plaza_prev")?.onclick = () => { page--; render(); };
-    document.getElementById("plaza_next")?.onclick = () => { page++; render(); };
+    document.getElementById("plaza_prev")?.addEventListener("click", () => { page--; render(); });
+    document.getElementById("plaza_next")?.addEventListener("click", () => { page++; render(); });
   };
 
   await render();
