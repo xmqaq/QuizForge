@@ -78,6 +78,36 @@
         </div>
       </div>
 
+      <!-- 答题配置 -->
+      <div v-if="showQuizConfig" class="card" style="margin-bottom:18px">
+        <div style="font-weight:700;margin-bottom:14px">开始答题</div>
+        <div class="row">
+          <div>
+            <label class="f">模式</label>
+            <select class="in" v-model="qcMode">
+              <option value="random">随机</option>
+              <option value="sequential">顺序</option>
+              <option value="wrong_only">只做错题</option>
+              <option value="simulation">模拟考试（限时）</option>
+            </select>
+          </div>
+          <div>
+            <label class="f">题量（留空=全部）</label>
+            <input class="in" v-model="qcCount" type="number" min="1" placeholder="全部">
+          </div>
+          <div v-if="qcMode === 'simulation'">
+            <label class="f">时长（分钟）</label>
+            <input class="in" v-model.number="qcTime" type="number" min="1">
+          </div>
+        </div>
+        <div class="row" style="margin-top:12px;justify-content:flex-end">
+          <div style="flex:none;display:flex;gap:8px">
+            <button class="btn" @click="goToQuiz">开始</button>
+            <button class="btn ghost" @click="showQuizConfig = false">取消</button>
+          </div>
+        </div>
+      </div>
+
       <!-- 操作按钮行 -->
       <div style="display:flex;gap:10px;margin-bottom:20px;flex-wrap:wrap">
         <button class="btn" :disabled="!bank.question_count" @click="startQuiz">开始答题</button>
@@ -133,6 +163,11 @@ const loading   = ref(true)
 const showManualForm = ref(false)
 const addingManual   = ref(false)
 const mq = ref({ content:'', option_a:'', option_b:'', option_c:'', option_d:'', correct_answer:'A', difficulty:'medium', explanation:'' })
+
+const showQuizConfig = ref(false)
+const qcMode  = ref('random')
+const qcCount = ref('')
+const qcTime  = ref(10)
 
 const showImportForm = ref(false)
 const xlFileRef      = ref(null)
@@ -246,7 +281,14 @@ async function exportXl() {
 }
 
 function startQuiz() {
-  router.push({ name: 'Quiz', query: { bankId: bankId.value, title: bank.value.title } })
+  showQuizConfig.value = !showQuizConfig.value
+}
+
+function goToQuiz() {
+  const q = { bankId: bankId.value, title: bank.value.title, mode: qcMode.value }
+  if (qcCount.value) q.count = qcCount.value
+  if (qcMode.value === 'simulation') q.limit = qcTime.value * 60
+  router.push({ name: 'Quiz', query: q })
 }
 
 onMounted(async () => {
