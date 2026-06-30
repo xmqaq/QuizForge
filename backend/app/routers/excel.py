@@ -64,7 +64,7 @@ async def download_template():
     return StreamingResponse(
         buf,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": "attachment; filename=quizforge_import_template.xlsx"},
+        headers={"Content-Disposition": 'attachment; filename="quizforge_import_template.xlsx"'},
     )
 
 
@@ -206,9 +206,17 @@ async def export_questions(
     wb.save(buf)
     buf.seek(0)
 
-    safe_title = bank.title.replace("/", "_").replace("\\", "_")
+    from urllib.parse import quote
+
+    safe_ascii = bank.title.encode("ascii", errors="ignore").decode().strip()
+    safe_ascii = (safe_ascii.replace("/", "_").replace("\\", "_")) or "questions"
+    encoded_name = quote(bank.title + ".xlsx", safe="")
+    content_disposition = (
+        f'attachment; filename="{safe_ascii}.xlsx"; '
+        f"filename*=UTF-8''{encoded_name}"
+    )
     return StreamingResponse(
         buf,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f"attachment; filename={safe_title}.xlsx"},
+        headers={"Content-Disposition": content_disposition},
     )

@@ -29,7 +29,7 @@ async def _get_question_or_404(db: AsyncSession, question_id: uuid.UUID) -> Ques
 async def list_questions(
     db: AsyncSession = Depends(get_db),
     page: int = Query(1, ge=1),
-    size: int = Query(20, ge=1, le=100),
+    size: int = Query(20, ge=1, le=1000),
     bank_id: uuid.UUID | None = None,
     status: QuestionStatus | None = None,
     difficulty: Difficulty | None = None,

@@ -30,7 +30,13 @@ export async function downloadFile(path, filename) {
   const r = await fetch(BASE + path, {
     headers: { Authorization: 'Bearer ' + auth.token },
   })
-  if (!r.ok) throw new Error('下载失败 ' + r.status)
+  if (!r.ok) {
+    const data = await r.json().catch(() => ({}))
+    const msg = data.detail
+      ? (typeof data.detail === 'string' ? data.detail : JSON.stringify(data.detail))
+      : `下载失败 ${r.status}`
+    throw new Error(msg)
+  }
   const blob = await r.blob()
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')

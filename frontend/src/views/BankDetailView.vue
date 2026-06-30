@@ -180,7 +180,7 @@ async function fetchBank() {
 }
 
 async function fetchQuestions() {
-  const { items } = await api(`/questions?bank_id=${bankId.value}&size=100`)
+  const { items } = await api(`/questions?bank_id=${bankId.value}&size=1000`)
   questions.value = items
   if (bank.value) bank.value.question_count = items.length
 }
